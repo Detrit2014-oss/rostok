@@ -9,6 +9,7 @@ import '../services/diary_service.dart';
 import '../services/focus_session_service.dart';
 import '../services/llm_service.dart';
 import '../services/pet_service.dart';
+import '../services/screen_time_service.dart';
 import '../services/update_service.dart';
 import '../widgets/common.dart';
 
@@ -187,8 +188,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<ChallengeService>().resetLocally();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Прогресс сброшен — начнём заново 🐣')),
+      const SnackBar(
+          content: Text('Прогресс сброшен — выберите нового питомца 🐣')),
     );
+  }
+
+  String _screenTimeText(ScreenTimeSupport support) {
+    switch (support) {
+      case ScreenTimeSupport.granted:
+        return 'Точный учёт Android: засчитываются только минуты '
+            'с погашенным экраном — время с включённым экраном '
+            'вычитается по системным данным.';
+      case ScreenTimeSupport.denied:
+        return 'Чтобы вычитать время с включённым экраном, выдайте '
+            'приложению доступ к данным об использовании '
+            '(Настройки → Доступ к использованию).';
+      case ScreenTimeSupport.unavailable:
+        return 'Здесь засчитывается всё время вне приложения. '
+            'На Android учёт точнее — по системному экранному времени '
+            '(как подключить: docs/SCREEN_TIME.md).';
+    }
   }
 
   @override
@@ -237,6 +256,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Palette.blue,
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            InfoCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('Экранное время',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text(
+                    _screenTimeText(focus.screenTimeSupport),
+                    style: const TextStyle(
+                        fontSize: 13, height: 1.45, color: Palette.inkSoft),
+                  ),
+                  if (focus.screenTimeSupport == ScreenTimeSupport.denied) ...<Widget>[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await ScreenTimeService.openUsageAccessSettings();
+                        if (!mounted) return;
+                        await context
+                            .read<FocusSessionService>()
+                            .refreshSupport();
+                      },
+                      icon: const Icon(Icons.settings_rounded, size: 18),
+                      label: const Text('Дать доступ (Android)'),
+                    ),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             InfoCard(
@@ -332,7 +382,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontSize: 14.5, fontWeight: FontWeight.w600),
                     ),
                     subtitle: const Text(
-                      '1 секунда = 1 минута — для быстрого теста в Chrome',
+                      '1 сек = 1 мин, считает всё время (обходит экранное время) — быстрый тест в Chrome',
                       style: TextStyle(fontSize: 12.5),
                     ),
                     value: focus.timeMachine,

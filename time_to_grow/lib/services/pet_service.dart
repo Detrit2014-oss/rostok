@@ -72,11 +72,9 @@ class PetService extends ChangeNotifier {
     _weekKey = _storage.getString(_kWeekKey);
 
     _rollDateCounters();
-
-    if (pets.isEmpty) {
-      pets.add(_createEgg());
-      _persistPets();
-    }
+    // С v1.1.0 первого питомца НЕ создаём автоматически:
+    // при пустой коллекции приложение показывает большой экран
+    // выбора питомца (см. PetSelectionScreen / _PetGate в app.dart).
     notifyListeners();
   }
 
@@ -110,14 +108,21 @@ class PetService extends ChangeNotifier {
     );
   }
 
-  /// Новое яйцо — только когда текущий питомец уже вырос.
-  Pet? hatchNewEgg() {
+  /// Создать питомца выбранного вида — результат большого экрана выбора.
+  /// Первый питомец (коллекция пуста) или новый — когда предыдущий вырос.
+  Pet? createPet(PetType type) {
     if (activePet != null) return null;
-    final Pet egg = _createEgg();
-    pets.add(egg);
+    final PetSpecies species = speciesOfType(type);
+    final Pet pet = Pet(
+      id: 'p${DateTime.now().millisecondsSinceEpoch}',
+      name: species.name,
+      type: species.type,
+      bornAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    pets.add(pet);
     _persistPets();
     notifyListeners();
-    return egg;
+    return pet;
   }
 
   void renamePet(String id, String name) {
@@ -199,7 +204,7 @@ class PetService extends ChangeNotifier {
     _storage.setInt(_kStreak, 0);
     _storage.setInt(_kWeekMinutes, 0);
     _storage.setString(_kLastDay, '');
-    pets.add(_createEgg());
+    // Коллекция пуста → приложение снова покажет экран выбора питомца.
     _persistPets();
     notifyListeners();
   }

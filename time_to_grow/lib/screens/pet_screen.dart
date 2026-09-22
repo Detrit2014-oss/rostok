@@ -7,6 +7,7 @@ import '../services/focus_session_service.dart';
 import '../services/pet_service.dart';
 import '../widgets/common.dart';
 import '../widgets/pet_canvas.dart';
+import 'pet_selection_screen.dart';
 
 /// Главный экран: сцена с питомцем + управление сессией детокса.
 class PetScreen extends StatelessWidget {
@@ -150,10 +151,10 @@ class PetScreen extends StatelessWidget {
       ),
       child: Column(
         children: <Widget>[
-          Text(
+          const Text(
             'Телефон отдыхает — питомец растёт',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -166,15 +167,18 @@ class PetScreen extends StatelessWidget {
                 fontSize: 34,
                 fontWeight: FontWeight.w800),
           ),
-          if (session.timeMachine)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
+          const SizedBox(height: 4),
+          _statusLine(session),
+          if (session.sessionScreenOnMs > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
               child: Text(
-                'Тестовый режим: 1 секунда = 1 минута',
+                'Экран горел: ${_fmt(Duration(milliseconds: session.sessionScreenOnMs))} — не в счёт',
                 style: TextStyle(
-                    color: Palette.yellow,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700),
+                  color: Colors.white.withOpacity(0.85),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           const SizedBox(height: 14),
@@ -191,7 +195,38 @@ class PetScreen extends StatelessWidget {
     );
   }
 
+  /// Живой статус: растёт ли питомец прямо сейчас.
+  Widget _statusLine(FocusSessionService session) {
+    if (session.timeMachine) {
+      return const Text(
+        'Тестовый режим: 1 секунда = 1 минута',
+        style: TextStyle(
+            color: Palette.yellow,
+            fontSize: 12,
+            fontWeight: FontWeight.w700),
+      );
+    }
+    if (session.countingNow) {
+      return const Text(
+        '🌱 Экран погашен — рост идёт',
+        style: TextStyle(
+            color: Colors.white,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700),
+      );
+    }
+    return const Text(
+      '⏸ Счёт на паузе: экран включён. Сверните приложение — и питомец начнёт расти',
+      textAlign: TextAlign.center,
+      style: TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600),
+    );
+  }
+
   Widget _idleCard(BuildContext context, Pet? active) {
+    final FocusSessionService session = context.watch<FocusSessionService>();
     return InfoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,13 +286,27 @@ class PetScreen extends StatelessWidget {
               onPressed: () => context.read<FocusSessionService>().start(),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Рост идёт, пока экран телефона погашен'
+              '${session.timeMachine ? '' : ' (а в Chrome — пока вкладка скрыта)'}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 11.5, color: Palette.inkSoft),
+            ),
+          ),
           if (active == null)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Center(
                 child: TextButton(
-                  onPressed: () => context.read<PetService>().hatchNewEgg(),
-                  child: const Text('Появилось новое яйцо — забрать сейчас'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PetSelectionScreen(canDismiss: true),
+                    ),
+                  ),
+                  child: const Text('Выбрать нового питомца'),
                 ),
               ),
             ),
@@ -313,7 +362,14 @@ class PetScreen extends StatelessWidget {
     final int minutes = session.stop();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Отлично! Питомцу начислено $minutes мин. 💚')),
+      SnackBar(
+        content: Text(
+          minutes == 0
+              ? 'Пока 0 мин — телефон не отдыхал 🙈 Питомец растёт, '
+                  'когда приложение свёрнуто и экран погашен'
+              : 'Отлично! Питомцу начислено $minutes мин без телефона. 💚',
+        ),
+      ),
     );
     final String? evolved = pet.lastEvolvedPetName;
     if (evolved != null) {

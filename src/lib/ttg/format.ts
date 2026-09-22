@@ -28,7 +28,7 @@ export function formatTimer(totalSeconds: number): string {
 }
 
 export function dayKey(d: Date): string {
-  return `${d.year ?? d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** Понедельник 00:00 указанной даты (мс). */

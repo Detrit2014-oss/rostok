@@ -99,11 +99,15 @@ for f in dart_files:
 # ── 4. Обязательные файлы и ключевые строки ──────────────────────────
 required = [
     'pubspec.yaml', 'README.md', 'CHANGELOG.md',
-    'docs/UPDATE_FLOW.md', 'docs/FIREBASE.md', 'update/version.json',
+    'docs/UPDATE_FLOW.md', 'docs/FIREBASE.md',
+    'docs/SCREEN_TIME.md', 'docs/WEB_TESTING.md',
+    'update/version.json',
     'lib/main.dart', 'lib/app.dart',
     'lib/screens/home_shell.dart', 'lib/screens/pet_screen.dart',
+    'lib/screens/pet_selection_screen.dart',
     'lib/screens/diary_screen.dart', 'lib/screens/challenge_screen.dart',
     'lib/screens/profile_screen.dart',
+    'lib/services/screen_time_service.dart',
     'lib/widgets/update_banner.dart', 'lib/widgets/pet_canvas.dart',
     'test/widget_test.dart',
 ]
@@ -112,15 +116,15 @@ for rel in required:
         errors.append(f'отсутствует обязательный файл: {rel}')
 
 vj = json.loads((ROOT / 'update/version.json').read_text(encoding='utf-8'))
-if vj.get('latest_version') != '1.0.0':
-    errors.append('version.json: latest_version != 1.0.0')
+if vj.get('latest_version') != '1.1.0':
+    errors.append('version.json: latest_version != 1.1.0')
 
 pubspec = (ROOT / 'pubspec.yaml').read_text(encoding='utf-8')
-if 'version: 1.0.0+1' not in pubspec:
-    errors.append('pubspec.yaml: версия не 1.0.0+1')
+if 'version: 1.1.0+2' not in pubspec:
+    errors.append('pubspec.yaml: версия не 1.1.0+2')
 
 appv = (ROOT / 'lib/core/app_version.dart').read_text(encoding='utf-8')
-if "kAppVersion = '1.0.0'" not in appv:
+if "kAppVersion = '1.1.0'" not in appv:
     errors.append('app_version.dart: версия не синхронизирована')
 
 # ── Итог ─────────────────────────────────────────────────────────────

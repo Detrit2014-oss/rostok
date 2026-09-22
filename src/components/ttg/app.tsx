@@ -8,6 +8,7 @@ import { useTTG } from "@/lib/ttg/store";
 import { C } from "@/lib/ttg/types";
 import { UpdateBanner } from "./update-banner";
 import { PetScreen } from "./pet-screen";
+import { PetChoiceScreen } from "./pet-choice-screen";
 import { DiaryScreen } from "./diary-screen";
 import { ChallengeScreen } from "./challenge-screen";
 import { ProfileScreen } from "./profile-screen";
@@ -36,18 +37,19 @@ export function TTGApp() {
   );
 
   const hydrated = useTTG((s) => s.hydrated);
-  const pets = useTTG((s) => s.pets);
+  const needsPetChoice = useTTG((s) => s.needsPetChoice);
   const rollDateCounters = useTTG((s) => s.rollDateCounters);
   const ensureWeekly = useTTG((s) => s.ensureWeekly);
   const refreshChallenge = useTTG((s) => s.refreshChallenge);
-  const hatchNewEgg = useTTG((s) => s.hatchNewEgg);
   const tick = useTTG((s) => s.tick);
+  const onAppVisibility = useTTG((s) => s.onAppVisibility);
 
-  // Гидрация и инициализация (аналог load() всех сервисов)
+  // Гидрация и инициализация (аналог load() всех сервисов).
+  // Первого питомца НЕ создаём автоматически — вид выбирает
+  // пользователь на большом экране выбора (как в v1.1.0).
   useEffect(() => {
     if (!hydrated) return;
     rollDateCounters();
-    if (pets.length === 0) hatchNewEgg(); // первое яйцо, как в PetService.load()
     ensureWeekly();
     refreshChallenge();
   }, [hydrated]);
@@ -58,14 +60,14 @@ export function TTGApp() {
     return () => clearInterval(t);
   }, [tick]);
 
-  // Мгновенное обновление таймера при возврате на вкладку
+  // Экранное время в демо: вкладка скрыта = «экран телефона погашен».
+  // Скрыли вкладку — счёт пошёл; вернулись — время зачислено.
   useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "visible") tick();
-    };
+    const onVis = () =>
+      onAppVisibility(document.visibilityState === "visible");
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [tick]);
+  }, [onAppVisibility]);
 
   if (!mounted || !hydrated) {
     return (
@@ -96,58 +98,68 @@ export function TTGApp() {
         className="relative flex h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-white sm:h-[min(880px,94dvh)] sm:rounded-[2rem] sm:border-2 sm:shadow-2xl"
         style={{ borderColor: C.border }}
       >
-        {/* Глобальный баннер обновлений */}
-        <div className="shrink-0">
-          <UpdateBanner />
-        </div>
+        {/* Выбор питомца — ворота первого запуска (v1.1.0) */}
+        {needsPetChoice ? (
+          <PetChoiceScreen />
+        ) : (
+          <>
+            {/* Глобальный баннер обновлений */}
+            <div className="shrink-0">
+              <UpdateBanner />
+            </div>
 
-        {/* Заголовок */}
-        <header className="shrink-0 bg-[#FFFDF7] py-3 text-center">
-          <h1 className="text-[20px] font-extrabold" style={{ color: C.ink }}>
-            {activeTab.title}
-          </h1>
-        </header>
-
-        {/* Контент */}
-        <main className="min-h-0 flex-1">
-          {tab === "pet" && <PetScreen />}
-          {tab === "diary" && <DiaryScreen />}
-          {tab === "challenge" && <ChallengeScreen />}
-          {tab === "profile" && <ProfileScreen />}
-        </main>
-
-        {/* Нижняя навигация */}
-        <nav
-          className="flex shrink-0 border-t-2 bg-white pb-[max(env(safe-area-inset-bottom),8px)] pt-1.5"
-          style={{ borderColor: C.border }}
-          aria-label="Основная навигация"
-        >
-          {TABS.map((t) => {
-            const selected = t.key === tab;
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
-                className="flex flex-1 flex-col items-center gap-0.5 py-1.5"
-                aria-current={selected ? "page" : undefined}
+            {/* Заголовок */}
+            <header className="shrink-0 bg-[#FFFDF7] py-3 text-center">
+              <h1
+                className="text-[20px] font-extrabold"
+                style={{ color: C.ink }}
               >
-                <Icon
-                  size={26}
-                  strokeWidth={selected ? 2.6 : 2}
-                  style={{ color: selected ? C.green : C.inkSoft }}
-                />
-                <span
-                  className="text-[12px] font-bold"
-                  style={{ color: selected ? C.green : C.inkSoft }}
-                >
-                  {t.label}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+                {activeTab.title}
+              </h1>
+            </header>
+
+            {/* Контент */}
+            <main className="min-h-0 flex-1">
+              {tab === "pet" && <PetScreen />}
+              {tab === "diary" && <DiaryScreen />}
+              {tab === "challenge" && <ChallengeScreen />}
+              {tab === "profile" && <ProfileScreen />}
+            </main>
+
+            {/* Нижняя навигация */}
+            <nav
+              className="flex shrink-0 border-t-2 bg-white pb-[max(env(safe-area-inset-bottom),8px)] pt-1.5"
+              style={{ borderColor: C.border }}
+              aria-label="Основная навигация"
+            >
+              {TABS.map((t) => {
+                const selected = t.key === tab;
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTab(t.key)}
+                    className="flex flex-1 flex-col items-center gap-0.5 py-1.5"
+                    aria-current={selected ? "page" : undefined}
+                  >
+                    <Icon
+                      size={26}
+                      strokeWidth={selected ? 2.6 : 2}
+                      style={{ color: selected ? C.green : C.inkSoft }}
+                    />
+                    <span
+                      className="text-[12px] font-bold"
+                      style={{ color: selected ? C.green : C.inkSoft }}
+                    >
+                      {t.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </>
+        )}
       </div>
 
       <Toaster

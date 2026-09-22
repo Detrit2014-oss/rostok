@@ -183,7 +183,7 @@ export function ProfileScreen() {
               Машина времени ×60
             </span>
             <span className="block text-[12.5px]" style={{ color: C.inkSoft }}>
-              1 секунда = 1 минута — для быстрого теста
+              1 сек = 1 мин, считает всё время (обходит экранный учёт) — для быстрого теста
             </span>
           </span>
           <Switch
@@ -215,11 +215,12 @@ export function ProfileScreen() {
           челленджах соревнуетесь с друзьями по часам цифрового детокса.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: C.inkSoft }}>
-          Это веб-демонстратор Flutter-приложения v1.0.0: вся логика (таймер
-          реального времени, эволюция, офлайн-ИИ, боты, проверка version.json)
-          перенесена 1:1.{" "}
+          С v1.1.0 рост привязан к экранному времени: засчитываются только минуты
+          с погашенным экраном (в демо — время со скрытой вкладкой), а питомца
+          теперь выбирают на большом экране выбора. Это веб-демонстратор
+          Flutter-приложения v1.1.0: вся логика перенесена 1:1.{" "}
           <a
-            href="/time_to_grow_v1.0.0.zip"
+            href="/time_to_grow_v1.1.0.zip"
             download
             className="font-bold underline"
             style={{ color: C.blue }}
@@ -378,7 +379,7 @@ export function ProfileScreen() {
               onClick={() => {
                 resetAll();
                 setResetOpen(false);
-                toast("Прогресс сброшен — начнём заново 🐣");
+                toast("Прогресс сброшен — выберите нового питомца 🐣");
               }}
             >
               Сбросить

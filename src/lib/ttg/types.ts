@@ -83,15 +83,45 @@ export interface LlmConfig {
   model: string;
 }
 
-export const PET_CATALOG: { name: string; type: PetType }[] = [
-  { name: "Лисёнок", type: "fox" },
-  { name: "Котик", type: "cat" },
-  { name: "Совёнок", type: "owl" },
-  { name: "Дракончик", type: "dragon" },
+export const PET_CATALOG: {
+  name: string;
+  type: PetType;
+  emoji: string;
+  desc: string;
+  accusative: string;
+}[] = [
+  {
+    name: "Лисёнок",
+    type: "fox",
+    emoji: "🦊",
+    desc: "Энергичный непоседа — любит быстрые прогулки",
+    accusative: "Лисёнка",
+  },
+  {
+    name: "Котик",
+    type: "cat",
+    emoji: "🐱",
+    desc: "Спокойный и мягкий — ценит долгую тишину",
+    accusative: "Котика",
+  },
+  {
+    name: "Совёнок",
+    type: "owl",
+    emoji: "🦉",
+    desc: "Мудрый хранитель тихих вечеров",
+    accusative: "Совёнка",
+  },
+  {
+    name: "Дракончик",
+    type: "dragon",
+    emoji: "🐲",
+    desc: "Весёлый смельчак — растёт от каждой передышки",
+    accusative: "Дракончика",
+  },
 ];
 
-export const K_APP_VERSION = "1.0.0";
-export const K_APP_BUILD_NUMBER = 1;
+export const K_APP_VERSION = "1.1.0";
+export const K_APP_BUILD_NUMBER = 2;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
 export const K_UPDATE_CHECK_INTERVAL_HOURS = 6;

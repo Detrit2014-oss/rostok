@@ -3,7 +3,7 @@
 // Порт lib/screens/pet_screen.dart: сцена питомца, сессия детокса,
 // прогресс стадии, список питомцев.
 
-import { useTTG, activePet } from "@/lib/ttg/store";
+import { useTTG, activePet, countedSecondsSoFar } from "@/lib/ttg/store";
 import {
   C,
   STAGE_NAMES,
@@ -37,10 +37,12 @@ export function PetScreen() {
   const todayMinutes = useTTG((s) => s.todayMinutes);
   const streakDays = useTTG((s) => s.streakDays);
   const sessionStartedAt = useTTG((s) => s.sessionStartedAt);
+  const countedSec = useTTG((s) => s.countedSec);
+  const awaySinceMs = useTTG((s) => s.awaySinceMs);
   const timeMachine = useTTG((s) => s.timeMachine);
   const startSession = useTTG((s) => s.startSession);
   const stopSession = useTTG((s) => s.stopSession);
-  const hatchNewEgg = useTTG((s) => s.hatchNewEgg);
+  const openPetChoice = useTTG((s) => s.openPetChoice);
   const renamePet = useTTG((s) => s.renamePet);
 
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
@@ -49,11 +51,15 @@ export function PetScreen() {
   const running = sessionStartedAt !== null;
   const nowMs = useTTG((s) => s.nowMs);
   const active = activePet(pets);
-  const sec = running && sessionStartedAt
-    ? timeMachine
-      ? Math.floor((nowMs - sessionStartedAt) / 1000) * 60
-      : Math.floor((nowMs - sessionStartedAt) / 1000)
-    : 0;
+  // Засчитанные секунды: только время вне вкладки (аналог погашенного
+  // экрана). Машина времени ×60 — исключение: считает всё время.
+  const sec = countedSecondsSoFar({
+    sessionStartedAt,
+    countedSec,
+    awaySinceMs,
+    timeMachine,
+    nowMs,
+  });
 
   return (
     <div className="flex h-full flex-col" style={{ background: `linear-gradient(180deg, ${C.skyTop}, ${C.skyBottom})` }}>
@@ -83,9 +89,17 @@ export function PetScreen() {
             <p className="mt-1 text-[34px] font-extrabold tabular-nums text-white">
               {formatTimer(sec)}
             </p>
-            {timeMachine && (
+            {timeMachine ? (
               <p className="pb-1 pt-0.5 text-[12px] font-bold" style={{ color: C.yellow }}>
                 Тестовый режим: 1 секунда = 1 минута
+              </p>
+            ) : awaySinceMs ? (
+              <p className="pb-1 pt-0.5 text-[12.5px] font-bold text-white">
+                🌱 Экран погашен — рост идёт
+              </p>
+            ) : (
+              <p className="pb-1 pt-0.5 text-[12px] font-semibold text-white/90">
+                ⏸ Счёт на паузе: вкладка активна. Скройте вкладку — питомец начнёт расти
               </p>
             )}
             <div className="pt-2">
@@ -98,10 +112,16 @@ export function PetScreen() {
                 fullWidth
                 onClick={() => {
                   const { minutes, evolvedPetName } = stopSession();
-                  toast(`Отлично! Питомцу начислено ${minutes} мин. 💚`);
+                  if (minutes === 0 && !evolvedPetName) {
+                    toast(
+                      "Пока 0 мин — вкладка была активна всё время 🙈 В демо рост идёт, пока вкладка скрыта (или включите машину времени)"
+                    );
+                  } else {
+                    toast(`Отлично! Питомцу начислено ${minutes} мин без телефона. 💚`);
+                  }
                   if (evolvedPetName) {
                     setTimeout(() => {
-                      toast.success(`Ура! 🎉 «${evolvedPetName}» вырос во взрослого питомца! На следующей прогулке появится новое яйцо — коллекция продолжается.`, {
+                      toast.success(`Ура! 🎉 «${evolvedPetName}» вырос во взрослого питомца! Теперь можно выбрать нового — коллекция продолжается.`, {
                         duration: 7000,
                       });
                     }, 400);
@@ -147,14 +167,20 @@ export function PetScreen() {
                 onClick={() => startSession()}
               />
             </div>
+            <p
+              className="pt-2 text-center text-[11.5px] leading-snug"
+              style={{ color: C.inkSoft }}
+            >
+              🌱 Рост идёт, пока вкладка скрыта (на телефоне — пока экран погашен)
+            </p>
             {!active && (
               <button
                 type="button"
-                onClick={() => hatchNewEgg()}
-                className="mt-2.5 w-full text-[14px] font-semibold"
+                onClick={() => openPetChoice()}
+                className="mt-2 w-full text-[14px] font-semibold"
                 style={{ color: C.green }}
               >
-                Появилось новое яйцо — забрать сейчас
+                Выбрать нового питомца
               </button>
             )}
           </InfoCard>

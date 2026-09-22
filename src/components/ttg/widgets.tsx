@@ -67,18 +67,20 @@ export function OutlineButton({
   label,
   icon: Icon,
   onClick,
+  fullWidth = false,
   className = "",
 }: {
   label: string;
   icon?: LucideIcon;
   onClick?: () => void;
+  fullWidth?: boolean;
   className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl border-2 bg-white px-[18px] py-3 text-[15px] font-bold transition-colors hover:bg-neutral-50 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-2xl border-2 bg-white px-[18px] py-3 text-[15px] font-bold transition-colors hover:bg-neutral-50 ${fullWidth ? "w-full" : ""} ${className}`}
       style={{ borderColor: C.border, color: C.ink }}
     >
       {Icon && <Icon size={20} strokeWidth={2.5} />}

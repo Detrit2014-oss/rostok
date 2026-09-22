@@ -24,6 +24,7 @@ import {
   Pet,
   petStage,
 } from "./types";
+import type { PetType } from "./types";
 import { moodAnalyze } from "./moodai";
 import { compareVersions, dayKey, mondayMs, nextVersion, seededRandom, stringHash } from "./format";
 
@@ -51,11 +52,18 @@ interface TTGState {
   lastSessionDayKey: string;
   weekKey: string;
 
-  // Session
+  // Session — привязана к экранному времени (порт v1.1.0):
+  // засчитывается только время, когда вкладка/приложение НЕ активны
+  // (на телефоне — экран погашен; в демо — вкладка скрыта).
   sessionStartedAt: number | null; // мс epoch
-  timeMachine: boolean;
+  countedSec: number; // уже засчитанные секунды «вне экрана»
+  awaySinceMs: number | null; // когда вкладка скрылась (мс epoch)
+  timeMachine: boolean; // ×60, считает ВСЁ время (тест)
   lastSessionMinutes: number | null;
   nowMs: number; // тикер для таймера (не персистится)
+
+  // Выбор питомца (v1.1.0)
+  needsPetChoice: boolean;
 
   // Diary
   diaryEntries: DiaryEntry[];
@@ -80,8 +88,11 @@ interface TTGState {
   rollDateCounters: () => void;
   startSession: () => void;
   stopSession: () => { minutes: number; evolvedPetName: string | null };
+  onAppVisibility: (visible: boolean) => void;
+  choosePet: (type: PetType) => void;
+  openPetChoice: () => void;
+  cancelPetChoice: () => void;
   addDetoxMinutes: (minutes: number) => string | null; // возвращает имя, если эволюция
-  hatchNewEgg: () => void;
   renamePet: (id: string, name: string) => void;
   setTimeMachine: (v: boolean) => void;
   addDiaryEntry: (text: string) => DiaryEntry;
@@ -156,9 +167,13 @@ export const useTTG = create<TTGState>()(
       weekKey: "",
 
       sessionStartedAt: null,
+      countedSec: 0,
+      awaySinceMs: null,
       timeMachine: false,
       lastSessionMinutes: null,
       nowMs: Date.now(),
+
+      needsPetChoice: true,
 
       diaryEntries: [],
       llm: { baseUrl: "https://api.openai.com/v1", apiKey: "", model: "gpt-4o-mini" },
@@ -200,17 +215,64 @@ export const useTTG = create<TTGState>()(
 
       startSession: () => {
         if (get().sessionStartedAt) return;
-        set({ sessionStartedAt: Date.now() });
+        set({
+          sessionStartedAt: Date.now(),
+          countedSec: 0,
+          awaySinceMs: null,
+        });
       },
+
+      /** Вкладка скрылась — рост пошёл; вернулась — капнувшее переводим в зачёт. */
+      onAppVisibility: (visible) => {
+        const s = get();
+        if (!s.sessionStartedAt || s.timeMachine) return;
+        if (!visible) {
+          if (!s.awaySinceMs) set({ awaySinceMs: Date.now() });
+          return;
+        }
+        const away = s.awaySinceMs;
+        if (!away) return;
+        const addSec = Math.max(0, Math.floor((Date.now() - away) / 1000));
+        set({ countedSec: s.countedSec + addSec, awaySinceMs: null, nowMs: Date.now() });
+      },
+
+      /** Большой экран выбора: создаём питомца выбранного вида. */
+      choosePet: (type) => {
+        const s = get();
+        const species = PET_CATALOG.find((x) => x.type === type) ?? PET_CATALOG[0];
+        const pet: Pet = {
+          id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
+          name: species.name,
+          type,
+          bornAt: Date.now(),
+          growthMinutes: 0,
+        };
+        set({ pets: [...s.pets, pet], needsPetChoice: false });
+      },
+
+      openPetChoice: () => set({ needsPetChoice: true }),
+      cancelPetChoice: () => set({ needsPetChoice: false }),
 
       stopSession: () => {
         const s = get();
         if (!s.sessionStartedAt) return { minutes: 0, evolvedPetName: null };
-        const realSec = Math.max(0, Math.floor((Date.now() - s.sessionStartedAt) / 1000));
-        // Машина времени: 1 секунда = 1 минута
-        const minutes = s.timeMachine ? realSec : Math.floor(realSec / 60);
+        let minutes: number;
+        if (s.timeMachine) {
+          // 1 секунда = 1 минута, считается всё время
+          minutes = Math.floor((Date.now() - s.sessionStartedAt) / 1000);
+        } else {
+          const pending = s.awaySinceMs
+            ? Math.max(0, Math.floor((Date.now() - s.awaySinceMs) / 1000))
+            : 0;
+          minutes = Math.floor((s.countedSec + pending) / 60);
+        }
+        set({
+          sessionStartedAt: null,
+          countedSec: 0,
+          awaySinceMs: null,
+          lastSessionMinutes: minutes,
+        });
         const evolved = s.addDetoxMinutes(minutes);
-        set({ sessionStartedAt: null, lastSessionMinutes: minutes });
         return { minutes, evolvedPetName: evolved };
       },
 
@@ -264,12 +326,6 @@ export const useTTG = create<TTGState>()(
             : null,
         });
         return evolvedName;
-      },
-
-      hatchNewEgg: () => {
-        const s = get();
-        if (s.pets.some((p) => petStage(p) < 3)) return;
-        set({ pets: [...s.pets, makeEgg(s.pets.length)] });
       },
 
       renamePet: (id, name) => {
@@ -413,13 +469,16 @@ export const useTTG = create<TTGState>()(
 
       resetAll: () =>
         set({
-          pets: [makeEgg(0)],
+          pets: [],
+          needsPetChoice: true,
           totalMinutes: 0,
           todayMinutes: 0,
           streakDays: 0,
           weekMinutes: 0,
           lastSessionDayKey: "",
           sessionStartedAt: null,
+          countedSec: 0,
+          awaySinceMs: null,
           lastSessionMinutes: null,
           diaryEntries: [],
           weekly: newWeeklyChallenge(),
@@ -430,6 +489,7 @@ export const useTTG = create<TTGState>()(
     }),
     {
       name: "ttg-web-state-v1",
+      version: 2,
       partialize: (s) => ({
         pets: s.pets,
         totalMinutes: s.totalMinutes,
@@ -440,7 +500,10 @@ export const useTTG = create<TTGState>()(
         lastSessionDayKey: s.lastSessionDayKey,
         weekKey: s.weekKey,
         sessionStartedAt: s.sessionStartedAt,
+        countedSec: s.countedSec,
+        awaySinceMs: s.awaySinceMs,
         timeMachine: s.timeMachine,
+        needsPetChoice: s.needsPetChoice,
         diaryEntries: s.diaryEntries,
         llm: s.llm,
         weekly: s.weekly,
@@ -449,6 +512,17 @@ export const useTTG = create<TTGState>()(
         appVersion: s.appVersion,
         hintDismissed: s.hintDismissed,
       }),
+      migrate: (persisted: unknown, version: number) => {
+        const s = persisted as Partial<TTGState>;
+        if (version < 2) {
+          // v1: яйцо создавалось автоматически — тем, у кого коллекция
+          // уже есть, выбор не показываем; новым — показываем.
+          s.needsPetChoice = !s.pets || s.pets.length === 0;
+          s.countedSec = 0;
+          s.awaySinceMs = null;
+        }
+        return s as TTGState;
+      },
       onRehydrateStorage: () => (state) => {
         state?.setHydrated();
       },
@@ -494,8 +568,20 @@ export function daysLeft(): number {
   return Math.round((nextMonday.getTime() - today.getTime()) / 86400000);
 }
 
-export function elapsedSeconds(startedAt: number | null, timeMachine: boolean): number {
-  if (!startedAt) return 0;
-  const real = Math.floor((Date.now() - startedAt) / 1000);
-  return timeMachine ? real * 60 : real;
+/** Засчитанные секунды текущей сессии (фон + текущий период вне вкладки). */
+export function countedSecondsSoFar(s: {
+  sessionStartedAt: number | null;
+  countedSec: number;
+  awaySinceMs: number | null;
+  timeMachine: boolean;
+  nowMs: number;
+}): number {
+  if (!s.sessionStartedAt) return 0;
+  if (s.timeMachine) {
+    return Math.floor((s.nowMs - s.sessionStartedAt) / 1000) * 60;
+  }
+  const pending = s.awaySinceMs
+    ? Math.max(0, Math.floor((s.nowMs - s.awaySinceMs) / 1000))
+    : 0;
+  return s.countedSec + pending;
 }

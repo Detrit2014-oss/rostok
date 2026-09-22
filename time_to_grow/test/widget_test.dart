@@ -13,7 +13,7 @@ import 'package:time_to_grow/services/storage_service.dart';
 import 'package:time_to_grow/services/update_service.dart';
 
 void main() {
-  testWidgets('Приложение запускается и показывает главный экран',
+  testWidgets('Первый запуск: экран выбора питомца → главный экран',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final StorageService storage = StorageService();
@@ -41,10 +41,21 @@ void main() {
         child: const TimeToGrowApp(),
       ),
     );
-
     await tester.pump();
+
+    // Коллекция пуста → большой экран выбора питомца.
+    expect(find.textContaining('Выбери питомца'), findsWidgets);
+
+    // Выбираем Котика и подтверждаем.
+    await tester.tap(find.textContaining('Котик').first);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.textContaining('Встречаем'));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(seconds: 1));
 
+    // Появился главный экран с AppBar «Время Расти».
     expect(find.text('Время Расти'), findsWidgets);
+    expect(pet.pets.length, 1);
+    expect(pet.pets.first.type.name, 'cat');
   });
 }
