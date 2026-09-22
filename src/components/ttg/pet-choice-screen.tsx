@@ -1,8 +1,8 @@
 "use client";
 
-// Порт lib/screens/pet_selection_screen.dart (v1.1.0): большой экран
+// Порт lib/screens/pet_selection_screen.dart (v1.2.0): большой экран
 // выбора питомца при первом запуске и после взросления предыдущего.
-// 4 большие живые карточки — видно, кем именно вырастет яйцо.
+// 10 больших живых карточек + кубик «Случайный питомец».
 
 import { useState } from "react";
 import { useTTG } from "@/lib/ttg/store";
@@ -49,7 +49,8 @@ export function PetChoiceScreen() {
           className="mt-1 text-[13.5px] font-semibold"
           style={{ color: C.inkSoft }}
         >
-          Он вырастет, пока вы отдыхаете от телефона
+          Он вырастет, пока вы отдыхаете от телефона. Всего видов:{" "}
+          {PET_CATALOG.length}
         </p>
       </div>
 
@@ -113,6 +114,18 @@ export function PetChoiceScreen() {
           disabled={!selectedSpecies}
           onClick={() => selected && choosePet(selected)}
         />
+        <button
+          type="button"
+          onClick={() => {
+            const pick =
+              PET_CATALOG[Math.floor(Math.random() * PET_CATALOG.length)];
+            choosePet(pick.type);
+          }}
+          className="mt-2 w-full text-[13.5px] font-semibold"
+          style={{ color: C.blue }}
+        >
+          🎲 Случайный питомец
+        </button>
         {canDismiss && (
           <button
             type="button"

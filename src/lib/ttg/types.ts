@@ -3,7 +3,17 @@
 // Flutter-проекта v1.0.0 (1:1 логика).
 // ─────────────────────────────────────────────────────────────────────
 
-export type PetType = "fox" | "cat" | "owl" | "dragon";
+export type PetType =
+  | "fox"
+  | "cat"
+  | "owl"
+  | "dragon"
+  | "duck"
+  | "bunny"
+  | "penguin"
+  | "hedgehog"
+  | "panda"
+  | "bear";
 
 export interface Pet {
   id: string;
@@ -118,10 +128,52 @@ export const PET_CATALOG: {
     desc: "Весёлый смельчак — растёт от каждой передышки",
     accusative: "Дракончика",
   },
+  {
+    name: "Утёнок",
+    type: "duck",
+    emoji: "🦆",
+    desc: "Весёлый плескун — обожает тихие лужи и покой",
+    accusative: "Утёнка",
+  },
+  {
+    name: "Зайчик",
+    type: "bunny",
+    emoji: "🐰",
+    desc: "Прыгучий сладкоежка — оживает на свежем воздухе",
+    accusative: "Зайчика",
+  },
+  {
+    name: "Пингвинёнок",
+    type: "penguin",
+    emoji: "🐧",
+    desc: "Неуклюжий милаха — верный друг долгих пауз",
+    accusative: "Пингвинёнка",
+  },
+  {
+    name: "Ёжик",
+    type: "hedgehog",
+    emoji: "🦔",
+    desc: "Колючий снаружи, добрый внутри — любит уединение",
+    accusative: "Ёжика",
+  },
+  {
+    name: "Панда",
+    type: "panda",
+    emoji: "🐼",
+    desc: "Неторопливый философ — мастер спокойствия",
+    accusative: "Панду",
+  },
+  {
+    name: "Медвежонок",
+    type: "bear",
+    emoji: "🐻",
+    desc: "Тёплый обнимашка — сладко спит, пока вы отдыхаете",
+    accusative: "Медвежонка",
+  },
 ];
 
-export const K_APP_VERSION = "1.1.0";
-export const K_APP_BUILD_NUMBER = 2;
+export const K_APP_VERSION = "1.2.0";
+export const K_APP_BUILD_NUMBER = 3;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
 export const K_UPDATE_CHECK_INTERVAL_HOURS = 6;
@@ -152,6 +204,12 @@ export const C = {
   cat: "#A8B8C8",
   owl: "#A97FE0",
   dragon: "#62C46A",
+  duck: "#FFD24C",
+  bunny: "#D9CFC4",
+  penguin: "#56789A",
+  hedgehog: "#C08552",
+  panda: "#F2EEE4",
+  bear: "#A9744F",
 } as const;
 
 export function bodyColor(type: PetType): string {
@@ -164,11 +222,24 @@ export function bodyColor(type: PetType): string {
       return C.owl;
     case "dragon":
       return C.dragon;
+    case "duck":
+      return C.duck;
+    case "bunny":
+      return C.bunny;
+    case "penguin":
+      return C.penguin;
+    case "hedgehog":
+      return C.hedgehog;
+    case "panda":
+      return C.panda;
+    case "bear":
+      return C.bear;
   }
 }
 
-/** Цвет животика: body @ 35% поверх белого (аналог Color.alphaBlend). */
+/** Белый животик у пингвинёнка и панды, у остальных — смесь с белым. */
 export function bellyColor(type: PetType): string {
+  if (type === "penguin" || type === "panda") return "#FDFBF5";
   const hex = bodyColor(type).replace("#", "");
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);

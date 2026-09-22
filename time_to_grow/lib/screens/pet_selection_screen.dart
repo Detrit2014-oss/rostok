@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -14,7 +16,8 @@ import '../widgets/pet_canvas.dart';
 ///  • при первом запуске (коллекция пуста) — вместо главного экрана;
 ///  • после взросления питомца — по кнопке «Выбрать нового питомца».
 ///
-/// Четыре большие живые карточки: видно, кем именно вырастет яйцо.
+/// С v1.2.0 — десять видов на прокручиваемой сетке больших живых
+/// карточек + кубик «Случайный питомец» для любителей сюрпризов.
 class PetSelectionScreen extends StatefulWidget {
   const PetSelectionScreen({super.key, this.canDismiss = false});
 
@@ -47,6 +50,16 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
     }
   }
 
+  /// Кубик: сразу создаём случайного питомца — приятный сюрприз.
+  void _random() {
+    final PetType type =
+        PetType.values[Random().nextInt(PetType.values.length)];
+    context.read<PetService>().createPet(type);
+    if (widget.canDismiss && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -61,11 +74,11 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
         child: SafeArea(
           child: Column(
             children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 18, 20, 0),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                 child: Column(
                   children: <Widget>[
-                    Text(
+                    const Text(
                       'Выбери питомца! 🐣',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -74,9 +87,10 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                         color: Palette.ink,
                       ),
                     ),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
                     Text(
-                      'Он вырастет, пока вы отдыхаете от телефона',
+                      'Он вырастет, пока вы отдыхаете от телефона. '
+                          'Всего видов: ${kPetCatalog.length}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14.5,
@@ -129,6 +143,11 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                       icon: Icons.emoji_nature_rounded,
                       fullWidth: true,
                       onPressed: _selected == null ? null : _confirm,
+                    ),
+                    TextButton.icon(
+                      onPressed: _random,
+                      icon: const Icon(Icons.casino_rounded, size: 18),
+                      label: const Text('Случайный питомец 🎲'),
                     ),
                     if (widget.canDismiss)
                       TextButton(

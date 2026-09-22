@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.2.0",
+  "latest_version": "1.3.0",
   "min_supported_version": "1.0.0",
-  "notes": "Что нового в 1.2.0: голосовые заметки в дневнике, вечерние напоминания «питомец скучает» и новые виды питомцев.",
+  "notes": "Что нового в 1.3.0 (демо-обновление): голосовые заметки в дневнике и вечерние напоминания «питомец скучает».",
   "force_update": false,
   "android_url": "https://play.google.com/store/apps/details?id=REPLACE_ME",
   "ios_url": "https://apps.apple.com/app/REPLACE_ME"

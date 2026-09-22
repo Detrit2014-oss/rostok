@@ -3,10 +3,16 @@
 // Порт lib/widgets/pet_canvas.dart: небо, солнце, облака, лужайка
 // и питомцы, нарисованные полностью процедурно (SVG) — ни одной картинки.
 
-import { bellyColor, bodyColor, Pet, petStage } from "@/lib/ttg/types";
+import type { CSSProperties } from "react";
+
+import { bellyColor, bodyColor, Pet, petStage, stageProgress } from "@/lib/ttg/types";
 import type { PetType } from "@/lib/ttg/types";
 
 const GROUND_Y = 182.4; // 0.76 * 240
+const BEAK = "#FF9500";
+const DARK = "#3A3A3A";
+const SPIKE = "#8B5E34";
+const CRACK = "#C9A96E";
 
 function Cloud({
   cx,
@@ -33,16 +39,52 @@ function Cloud({
   );
 }
 
-function Egg({ s, spot }: { s: number; spot: string }) {
-  const w = 34 * s;
-  const h = 44 * s;
+/**
+ * Большое яйцо (v1.2.0): в ~1,8 раза крупнее прежнего, растёт с прогрессом,
+ * заметно покачивается перед вылуплением и покрывается трещинками.
+ */
+function Egg({ spot, progress }: { spot: string; progress: number }) {
+  const eggS = 0.95 + 0.45 * progress;
+  const w = 34 * eggS;
+  const h = 44 * eggS;
+  const wobbleDeg = (1.5 + 4 * progress).toFixed(1);
   return (
-    <g>
+    <g
+      className="ttg-egg"
+      style={{ "--wobble": `${wobbleDeg}deg` } as CSSProperties}
+    >
       <ellipse cx={0} cy={-h / 2} rx={w / 2} ry={h / 2} fill="#FFF6E3" />
-      <ellipse cx={0} cy={-h / 2} rx={(w / 2) - w * 0.12} ry={(h / 2) - w * 0.12} fill="#FFFBF0" />
-      <circle cx={-w * 0.18} cy={-h * 0.55} r={3.5 * s} fill={spot} opacity="0.65" />
-      <circle cx={w * 0.15} cy={-h * 0.35} r={2.6 * s} fill={spot} opacity="0.65" />
-      <circle cx={-w * 0.05} cy={-h * 0.75} r={2.0 * s} fill={spot} opacity="0.65" />
+      <ellipse
+        cx={0}
+        cy={-h / 2}
+        rx={w / 2 - w * 0.12}
+        ry={h / 2 - w * 0.12}
+        fill="#FFFBF0"
+      />
+      <circle cx={-w * 0.18} cy={-h * 0.55} r={3.5 * eggS} fill={spot} opacity="0.65" />
+      <circle cx={w * 0.15} cy={-h * 0.35} r={2.6 * eggS} fill={spot} opacity="0.65" />
+      <circle cx={-w * 0.05} cy={-h * 0.75} r={2.0 * eggS} fill={spot} opacity="0.65" />
+      {/* Трещинки: первая после ~45%, вторая после ~75% прогресса */}
+      {progress > 0.45 && (
+        <polyline
+          points={`0,${-h * 0.78} ${w * 0.14},${-h * 0.66} ${-w * 0.07},${-h * 0.54} ${w * 0.1},${-h * 0.44}`}
+          fill="none"
+          stroke={CRACK}
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {progress > 0.75 && (
+        <polyline
+          points={`${-w * 0.05},${-h * 0.52} ${-w * 0.2},${-h * 0.4} ${w * 0.02},${-h * 0.28}`}
+          fill="none"
+          stroke={CRACK}
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
     </g>
   );
 }
@@ -68,6 +110,52 @@ function Creature({
 
   return (
     <g>
+      {/* ── За телом: лапки, уши-лопушки, ласты, крылья ────────────── */}
+      {(type === "duck" || type === "penguin") && (
+        <g fill={BEAK}>
+          <ellipse cx={-bw * 0.18} cy={-1.5} rx={bw * 0.12} ry={bh * 0.05} />
+          <ellipse cx={bw * 0.18} cy={-1.5} rx={bw * 0.12} ry={bh * 0.05} />
+        </g>
+      )}
+
+      {/* Длинные уши зайчика — из-за головы, с розовой серединкой */}
+      {type === "bunny" && (
+        <g>
+          <rect
+            x={-bw * 0.16 - bw * 0.085}
+            y={bodyCy - bh * 0.62 - bh * 0.31}
+            width={bw * 0.17}
+            height={bh * 0.62}
+            rx={bw * 0.085}
+            fill={body}
+          />
+          <rect
+            x={bw * 0.16 - bw * 0.085}
+            y={bodyCy - bh * 0.62 - bh * 0.31}
+            width={bw * 0.17}
+            height={bh * 0.62}
+            rx={bw * 0.085}
+            fill={body}
+          />
+          <rect
+            x={-bw * 0.16 - bw * 0.04}
+            y={bodyCy - bh * 0.56 - bh * 0.21}
+            width={bw * 0.08}
+            height={bh * 0.42}
+            rx={bw * 0.04}
+            fill="#F5B8C4"
+          />
+          <rect
+            x={bw * 0.16 - bw * 0.04}
+            y={bodyCy - bh * 0.56 - bh * 0.21}
+            width={bw * 0.08}
+            height={bh * 0.42}
+            rx={bw * 0.04}
+            fill="#F5B8C4"
+          />
+        </g>
+      )}
+
       {/* Крылья дракончика (подросток и взрослый) */}
       {type === "dragon" && s >= 0.55 + 2 * 0.22 && (
         <g fill={body} opacity="0.75">
@@ -80,7 +168,25 @@ function Creature({
         </g>
       )}
 
-      {/* Ушки */}
+      {/* Ласты пингвинёнка — по бокам */}
+      {type === "penguin" && (
+        <g fill={body} opacity="0.85">
+          <ellipse cx={-bw * 0.52} cy={bodyCy + bh * 0.02} rx={bw * 0.1} ry={bh * 0.26} />
+          <ellipse cx={bw * 0.52} cy={bodyCy + bh * 0.02} rx={bw * 0.1} ry={bh * 0.26} />
+        </g>
+      )}
+
+      {/* Тело и животик */}
+      <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
+      <ellipse
+        cx={0}
+        cy={bodyCy + bh * 0.18}
+        rx={bw * 0.31}
+        ry={bh * 0.25}
+        fill={belly}
+      />
+
+      {/* ── Поверх тела: уши, хохолки, колючки ─────────────────── */}
       {(type === "fox" || type === "cat") && (
         <g fill={body}>
           <path
@@ -103,22 +209,63 @@ function Creature({
           <circle cx={bw * 0.14} cy={earY - bh * 0.06} r={4 * s} />
         </g>
       )}
-
-      {/* Тело и животик */}
-      <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
-      <ellipse
-        cx={0}
-        cy={bodyCy + bh * 0.18}
-        rx={bw * 0.31}
-        ry={bh * 0.25}
-        fill={belly}
-      />
+      {/* Хохолок утёнка из трёх перьев */}
+      {type === "duck" && (
+        <g fill={body}>
+          <circle cx={-bw * 0.07} cy={bodyCy - bh * 0.52} r={2.6 * s} />
+          <circle cx={0} cy={bodyCy - bh * 0.58} r={2.8 * s} />
+          <circle cx={bw * 0.07} cy={bodyCy - bh * 0.52} r={2.6 * s} />
+        </g>
+      )}
+      {/* Веер колючек ёжика по верхней дуге тела */}
+      {type === "hedgehog" && (
+        <g fill={SPIKE}>
+          {[-2.45, -2.0, -1.57, -1.14, -0.7].map((a) => {
+            const tipX = bw * 0.5 * 1.42 * Math.cos(a);
+            const tipY = bodyCy + bh * 0.5 * 1.42 * Math.sin(a);
+            const b1X = bw * 0.5 * Math.cos(a + 0.16);
+            const b1Y = bodyCy + bh * 0.5 * Math.sin(a + 0.16);
+            const b2X = bw * 0.5 * Math.cos(a - 0.16);
+            const b2Y = bodyCy + bh * 0.5 * Math.sin(a - 0.16);
+            return (
+              <polygon
+                key={a}
+                points={`${b1X},${b1Y} ${tipX},${tipY} ${b2X},${b2Y}`}
+              />
+            );
+          })}
+        </g>
+      )}
+      {/* Чёрные ушки-помпоны панды */}
+      {type === "panda" && (
+        <g fill={DARK}>
+          <circle cx={-bw * 0.27} cy={earY - bh * 0.06} r={7.5 * s} />
+          <circle cx={bw * 0.27} cy={earY - bh * 0.06} r={7.5 * s} />
+        </g>
+      )}
+      {/* Круглые ушки медвежонка со светлой серединкой */}
+      {type === "bear" && (
+        <g>
+          <circle cx={-bw * 0.3} cy={earY - bh * 0.06} r={8 * s} fill={body} />
+          <circle cx={bw * 0.3} cy={earY - bh * 0.06} r={8 * s} fill={body} />
+          <circle cx={-bw * 0.3} cy={earY - bh * 0.06} r={4 * s} fill={belly} />
+          <circle cx={bw * 0.3} cy={earY - bh * 0.06} r={4 * s} fill={belly} />
+        </g>
+      )}
 
       {/* Румянец */}
       <g fill="#FF8FA3" opacity="0.55">
         <circle cx={-bw * 0.28} cy={bodyCy + bh * 0.05} r={4.5 * s} />
         <circle cx={bw * 0.28} cy={bodyCy + bh * 0.05} r={4.5 * s} />
       </g>
+
+      {/* Пятна вокруг глаз панды — только при открытых глазах */}
+      {type === "panda" && !sleeping && (
+        <g fill={DARK}>
+          <ellipse cx={-eyeDX} cy={eyeY} rx={bw * 0.15} ry={bh * 0.17} />
+          <ellipse cx={eyeDX} cy={eyeY} rx={bw * 0.15} ry={bh * 0.17} />
+        </g>
+      )}
 
       {/* Глаза: спят во время сессии, иначе моргают */}
       {sleeping ? (
@@ -143,21 +290,48 @@ function Creature({
         </g>
       )}
 
-      {/* Клюв совёнка / улыбка остальных */}
-      {type === "owl" ? (
+      {/* Клювы, мордочка, улыбка */}
+      {(type === "owl" || type === "penguin") && (
         <path
-          d={`M ${-4 * s} ${bodyCy + bh * 0.06} L ${4 * s} ${bodyCy + bh * 0.06} L 0 ${bodyCy + bh * 0.06 + 7 * s} Z`}
-          fill="#FFB703"
-        />
-      ) : (
-        <path
-          d={`M ${-7 * s} ${mouthY} Q 0 ${mouthY + 6 * s} ${7 * s} ${mouthY}`}
-          stroke="#4A3B2A"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          fill="none"
+          d={`M ${-(type === "penguin" ? 5.5 : 4) * s} ${bodyCy + bh * 0.06} L ${(type === "penguin" ? 5.5 : 4) * s} ${bodyCy + bh * 0.06} L 0 ${bodyCy + bh * 0.06 + 7 * s} Z`}
+          fill={type === "penguin" ? BEAK : "#FFB703"}
         />
       )}
+      {type === "duck" && (
+        <rect
+          x={-bw * 0.18}
+          y={bodyCy + bh * 0.1 - bh * 0.08}
+          width={bw * 0.36}
+          height={bh * 0.16}
+          rx={4 * s}
+          fill={BEAK}
+        />
+      )}
+      {type === "bear" && (
+        <g>
+          <ellipse cx={0} cy={bodyCy + bh * 0.16} rx={bw * 0.2} ry={bh * 0.15} fill={belly} />
+          <circle cx={0} cy={bodyCy + bh * 0.1} r={3.2 * s} fill={DARK} />
+          <path
+            d={`M ${-6 * s} ${bodyCy + bh * 0.2} Q 0 ${bodyCy + bh * 0.26} ${6 * s} ${bodyCy + bh * 0.2}`}
+            stroke={DARK}
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </g>
+      )}
+      {type !== "owl" &&
+        type !== "penguin" &&
+        type !== "duck" &&
+        type !== "bear" && (
+          <path
+            d={`M ${-7 * s} ${mouthY} Q 0 ${mouthY + 6 * s} ${7 * s} ${mouthY}`}
+            stroke="#4A3B2A"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            fill="none"
+          />
+        )}
     </g>
   );
 }
@@ -187,7 +361,7 @@ function PetFigure({
         style={{ animationDelay: `${-index * 0.7}s` }}
       >
         {stage === 0 ? (
-          <Egg s={s} spot={bodyColor(pet.type)} />
+          <Egg spot={bodyColor(pet.type)} progress={stageProgress(pet)} />
         ) : (
           <Creature s={s} type={pet.type} sleeping={sleeping} />
         )}

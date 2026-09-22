@@ -34,6 +34,18 @@ const List<PetSpecies> kPetCatalog = <PetSpecies>[
       'Мудрый хранитель тихих вечеров', 'Совёнка'),
   PetSpecies('Дракончик', PetType.dragon, '🐲',
       'Весёлый смельчак — растёт от каждой передышки', 'Дракончика'),
+  PetSpecies('Утёнок', PetType.duck, '🦆',
+      'Весёлый плескун — обожает тихие лужи и покой', 'Утёнка'),
+  PetSpecies('Зайчик', PetType.bunny, '🐰',
+      'Прыгучий сладкоежка — оживает на свежем воздухе', 'Зайчика'),
+  PetSpecies('Пингвинёнок', PetType.penguin, '🐧',
+      'Неуклюжий милаха — верный друг долгих пауз', 'Пингвинёнка'),
+  PetSpecies('Ёжик', PetType.hedgehog, '🦔',
+      'Колючий снаружи, добрый внутри — любит уединение', 'Ёжика'),
+  PetSpecies('Панда', PetType.panda, '🐼',
+      'Неторопливый философ — мастер спокойствия', 'Панду'),
+  PetSpecies('Медвежонок', PetType.bear, '🐻',
+      'Тёплый обнимашка — сладко спит, пока вы отдыхаете', 'Медвежонка'),
 ];
 
 PetSpecies speciesOfType(PetType type) => kPetCatalog.firstWhere(

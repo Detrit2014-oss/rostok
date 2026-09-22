@@ -139,6 +139,18 @@
   animation: ttg-bob-sleep 4s ease-in-out infinite;
 }
 
+/* Большое яйцо v1.2.0: покачивается перед вылуплением.
+   Амплитуда задаётся через --wobble (растёт с прогрессом стадии). */
+@keyframes ttg-egg-wobble {
+  0%, 100% { transform: rotate(calc(var(--wobble, 2deg) * -1)); }
+  50% { transform: rotate(var(--wobble, 2deg)); }
+}
+.ttg-egg {
+  animation: ttg-egg-wobble 1.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
 @keyframes ttg-blink {
   0%, 91%, 100% { transform: scaleY(1); }
   93% { transform: scaleY(0.1); }
