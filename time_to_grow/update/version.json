@@ -1,0 +1,8 @@
+{
+  "latest_version": "1.0.0",
+  "min_supported_version": "1.0.0",
+  "notes": "Первый релиз «Время Расти»: питомец растёт, пока телефон отдыхает; ИИ-дневник настроения и челленджи недели.",
+  "force_update": false,
+  "android_url": "https://play.google.com/store/apps/details?id=REPLACE_ME",
+  "ios_url": "https://apps.apple.com/app/REPLACE_ME"
+}

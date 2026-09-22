@@ -1,0 +1,206 @@
+import 'package:flutter/foundation.dart';
+
+import '../data/pet_catalog.dart';
+import '../models/pet.dart';
+import 'storage_service.dart';
+
+String _dayKey(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Состояние питомцев и глобальной статистики детокса.
+/// Минуты «вдали от телефона» = еда для роста питомца.
+class PetService extends ChangeNotifier {
+  PetService(this._storage);
+
+  final StorageService _storage;
+
+  final List<Pet> pets = <Pet>[];
+
+  int totalMinutes = 0;
+  int todayMinutes = 0;
+  int streakDays = 0;
+  int weekMinutes = 0;
+
+  String _todayKey = '';
+  String _lastSessionDayKey = '';
+  String _weekKey = '';
+
+  /// Имя питомца, выросшего в ходе последней сессии (для поздравления).
+  String? lastEvolvedPetName;
+
+  static const String _kPets = 'pet_list';
+  static const String _kTotal = 'stats_total_minutes';
+  static const String _kTodayMinutes = 'stats_today_minutes';
+  static const String _kTodayKey = 'stats_today_key';
+  static const String _kStreak = 'stats_streak';
+  static const String _kLastDay = 'stats_last_session_day';
+  static const String _kWeekMinutes = 'stats_week_minutes';
+  static const String _kWeekKey = 'stats_week_key';
+
+  /// Текущий питомец — тот, что ещё не вырос.
+  Pet? get activePet {
+    for (final Pet p in pets) {
+      if (!p.isAdult) return p;
+    }
+    return null;
+  }
+
+  int get adultCount => pets.where((Pet p) => p.isAdult).length;
+
+  void load() {
+    final String raw = _storage.getString(_kPets);
+    if (raw.isNotEmpty) {
+      try {
+        final dynamic decoded = _storage.decodeJson(raw);
+        if (decoded is List) {
+          pets
+            ..clear()
+            ..addAll(decoded
+                .whereType<Map<String, dynamic>>()
+                .map((Map<String, dynamic> e) => Pet.fromJson(e)));
+        }
+      } catch (_) {
+        // Повреждённые данные игнорируем — начнём с нового яйца.
+      }
+    }
+    totalMinutes = _storage.getInt(_kTotal);
+    todayMinutes = _storage.getInt(_kTodayMinutes);
+    streakDays = _storage.getInt(_kStreak);
+    weekMinutes = _storage.getInt(_kWeekMinutes);
+    _todayKey = _storage.getString(_kTodayKey);
+    _lastSessionDayKey = _storage.getString(_kLastDay);
+    _weekKey = _storage.getString(_kWeekKey);
+
+    _rollDateCounters();
+
+    if (pets.isEmpty) {
+      pets.add(_createEgg());
+      _persistPets();
+    }
+    notifyListeners();
+  }
+
+  void _rollDateCounters() {
+    final DateTime now = DateTime.now();
+    final String today = _dayKey(now);
+    if (today != _todayKey) {
+      _todayKey = today;
+      todayMinutes = 0;
+      _storage.setString(_kTodayKey, today);
+      _storage.setInt(_kTodayMinutes, 0);
+    }
+    final DateTime monday = now.subtract(Duration(days: now.weekday - 1));
+    final String week =
+        _dayKey(DateTime(monday.year, monday.month, monday.day));
+    if (week != _weekKey) {
+      _weekKey = week;
+      weekMinutes = 0;
+      _storage.setString(_kWeekKey, week);
+      _storage.setInt(_kWeekMinutes, 0);
+    }
+  }
+
+  Pet _createEgg() {
+    final PetSpecies species = kPetCatalog[pets.length % kPetCatalog.length];
+    return Pet(
+      id: 'p${DateTime.now().millisecondsSinceEpoch}',
+      name: species.name,
+      type: species.type,
+      bornAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// Новое яйцо — только когда текущий питомец уже вырос.
+  Pet? hatchNewEgg() {
+    if (activePet != null) return null;
+    final Pet egg = _createEgg();
+    pets.add(egg);
+    _persistPets();
+    notifyListeners();
+    return egg;
+  }
+
+  void renamePet(String id, String name) {
+    final String clean = name.trim();
+    if (clean.isEmpty) return;
+    for (final Pet p in pets) {
+      if (p.id == id) {
+        p.name = clean;
+        break;
+      }
+    }
+    _persistPets();
+    notifyListeners();
+  }
+
+  /// Начислить минуты детокса активному питомцу и общей статистике.
+  void addDetoxMinutes(int minutes) {
+    if (minutes <= 0) return;
+    _rollDateCounters();
+
+    Pet? target = activePet;
+    if (target == null) {
+      final Pet egg = _createEgg();
+      pets.add(egg);
+      target = egg;
+    }
+    final bool wasAdult = target.isAdult;
+    target.growthMinutes += minutes;
+    if (!wasAdult && target.isAdult) {
+      lastEvolvedPetName = target.name;
+    }
+
+    totalMinutes += minutes;
+    todayMinutes += minutes;
+    weekMinutes += minutes;
+
+    final String today = _dayKey(DateTime.now());
+    if (_lastSessionDayKey != today) {
+      final String yesterday =
+          _dayKey(DateTime.now().subtract(const Duration(days: 1)));
+      if (_lastSessionDayKey == yesterday) {
+        streakDays += 1;
+      } else {
+        streakDays = 1;
+      }
+      _lastSessionDayKey = today;
+      _storage.setString(_kLastDay, today);
+      _storage.setInt(_kStreak, streakDays);
+    }
+
+    _persistPets();
+    _storage.setInt(_kTotal, totalMinutes);
+    _storage.setInt(_kTodayMinutes, todayMinutes);
+    _storage.setInt(_kWeekMinutes, weekMinutes);
+    notifyListeners();
+  }
+
+  void ackEvolution() {
+    lastEvolvedPetName = null;
+  }
+
+  void _persistPets() {
+    _storage.setString(
+      _kPets,
+      _storage.encodeJson(pets.map((Pet p) => p.toJson()).toList()),
+    );
+  }
+
+  void reset() {
+    pets.clear();
+    totalMinutes = 0;
+    todayMinutes = 0;
+    streakDays = 0;
+    weekMinutes = 0;
+    lastEvolvedPetName = null;
+    _lastSessionDayKey = '';
+    _storage.setInt(_kTotal, 0);
+    _storage.setInt(_kTodayMinutes, 0);
+    _storage.setInt(_kStreak, 0);
+    _storage.setInt(_kWeekMinutes, 0);
+    _storage.setString(_kLastDay, '');
+    pets.add(_createEgg());
+    _persistPets();
+    notifyListeners();
+  }
+}
