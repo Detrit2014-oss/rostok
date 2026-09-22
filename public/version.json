@@ -1,0 +1,8 @@
+{
+  "latest_version": "1.1.0",
+  "min_supported_version": "1.0.0",
+  "notes": "Что нового в 1.1.0: голосовые заметки в дневнике (на телефонах), напоминания о вечерней записи и новое яйцо-сюрприз в коллекции.",
+  "force_update": false,
+  "android_url": "https://play.google.com/store/apps/details?id=REPLACE_ME",
+  "ios_url": "https://apps.apple.com/app/REPLACE_ME"
+}
