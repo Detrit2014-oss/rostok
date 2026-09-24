@@ -73,3 +73,5 @@ ios/Flutter/Flutter.podspec
 *.iml
 *.ipr
 *.iws
+/scripts/verify-*.png
+/tool-results/
