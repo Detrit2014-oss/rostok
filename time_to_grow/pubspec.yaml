@@ -12,6 +12,7 @@ dependencies:
   provider: ^6.1.2
   shared_preferences: ^2.2.3
   http: ^1.2.1
+  geolocator: ^12.0.0
   # ── Firebase для челленджей с друзьями (план v2.0) ──────────────────
   # Пошаговая инструкция и готовый код бэкенда: docs/FIREBASE.md
   # Раскомментируйте после настройки проекта Firebase:

@@ -8,6 +8,7 @@ import '../core/theme.dart';
 import '../data/species_style.dart';
 import '../models/pet.dart';
 import '../services/pet_service.dart';
+import '../services/quest_service.dart';
 import '../widgets/common.dart';
 
 /// Мини-игра «Покорми питомца» (v1.6.0).
@@ -135,6 +136,8 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
       petService.addXp(pet, _score * 2);
       petService.earnCoins(_score);
     }
+    if (!mounted) return;
+    context.read<QuestService>().addProgress('feed_5', _score);
   }
 
   /// Тап по еде: она летит в рот питомцу.

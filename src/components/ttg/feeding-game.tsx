@@ -36,6 +36,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
   const pets = useTTG((s) => s.pets);
   const addXp = useTTG((s) => s.addXp);
   const addCoins = useTTG((s) => s.addCoins);
+  const addQuestProgress = useTTG((s) => s.addQuestProgress);
   const coins = useTTG((s) => s.coins);
 
   const pet: Pet | null = pets.find((p) => petStageOf(p) < 3) ?? null;
@@ -103,6 +104,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
       addXp(s * 2);
       addCoins(s);
     }
+    addQuestProgress("feed_5", s);
   };
 
   useEffect(

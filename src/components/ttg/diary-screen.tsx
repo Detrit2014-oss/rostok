@@ -88,6 +88,7 @@ export function DiaryScreen() {
   const entries = useTTG((s) => s.diaryEntries);
   const llm = useTTG((s) => s.llm);
   const addDiaryEntry = useTTG((s) => s.addDiaryEntry);
+  const addQuestProgress = useTTG((s) => s.addQuestProgress);
   const applyLlmReply = useTTG((s) => s.applyLlmReply);
 
   const [text, setText] = useState("");
@@ -101,6 +102,7 @@ export function DiaryScreen() {
     if (!t) return;
     setText("");
     const entry = addDiaryEntry(t);
+    addQuestProgress("diary_1", 1);
     setOpenEntryId(entry.id);
     if (llmConfigured) {
       setThinking(true);

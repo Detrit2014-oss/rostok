@@ -9,8 +9,11 @@ import 'services/diary_service.dart';
 import 'services/focus_session_service.dart';
 import 'services/llm_service.dart';
 import 'services/pet_service.dart';
+import 'services/quest_service.dart';
+import 'services/sleep_service.dart';
 import 'services/storage_service.dart';
 import 'services/update_service.dart';
+import 'services/weather_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +42,12 @@ Future<void> main() async {
         ..diaryCountProvider = () => diaryService.entries.length
         ..load();
 
+  // Задания, сон и погода (v1.7.0). QuestService сам слушает PetService:
+  // минуты сессий капают в задания session_10/session_30.
+  final QuestService questService = QuestService(storage, petService)..load();
+  final SleepService sleepService = SleepService(storage, petService)..load();
+  final WeatherService weatherService = WeatherService(storage)..load();
+
   // Сессия детокса считается по реальному времени: приложение свёрнуто —
   // телефон отложен — питомец растёт. Следим за жизненным циклом.
   WidgetsBinding.instance.addObserver(focusService);
@@ -55,6 +64,9 @@ Future<void> main() async {
         ChangeNotifierProvider<UpdateService>.value(value: updateService),
         ChangeNotifierProvider<AchievementService>.value(
             value: achievementService),
+        ChangeNotifierProvider<QuestService>.value(value: questService),
+        ChangeNotifierProvider<SleepService>.value(value: sleepService),
+        ChangeNotifierProvider<WeatherService>.value(value: weatherService),
       ],
       child: const TimeToGrowApp(),
     ),
@@ -64,5 +76,6 @@ Future<void> main() async {
   Future<void>.delayed(const Duration(seconds: 3), () {
     updateService.check();
     achievementService.recompute();
+    weatherService.refresh();
   });
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../models/pet.dart';
 import '../services/pet_service.dart';
+import '../services/quest_service.dart';
 import '../widgets/common.dart';
 
 /// Магазин «Ростка» (v1.5.0): тратим монетки, заработанные паузами.
@@ -22,6 +23,10 @@ class ShopScreen extends StatelessWidget {
   void _buyFrame(BuildContext context, Pet pet, _FrameItem f) {
     final PetService petService = context.read<PetService>();
     final bool ok = petService.buyFrame(pet, f.id, f.price);
+    if (ok && f.price > 0) {
+      // ignore: use_build_context_synchronously
+      context.read<QuestService>().addProgress('shop_1', 1);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -34,6 +39,9 @@ class ShopScreen extends StatelessWidget {
   void _buyFreeze(BuildContext context) {
     final PetService petService = context.read<PetService>();
     final bool ok = petService.buyFreeze();
+    if (ok) {
+      context.read<QuestService>().addProgress('shop_1', 1);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

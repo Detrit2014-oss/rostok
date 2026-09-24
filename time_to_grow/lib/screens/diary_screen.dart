@@ -8,6 +8,7 @@ import '../core/utils.dart';
 import '../models/diary_entry.dart';
 import '../services/diary_service.dart';
 import '../services/llm_service.dart';
+import '../services/quest_service.dart';
 import '../widgets/common.dart';
 
 /// Вечерний дневник настроения: короткая запись → ответ ИИ-садовника.
@@ -34,6 +35,8 @@ class _DiaryScreenState extends State<DiaryScreen> {
     if (text.isEmpty) return;
     final DiaryService diary = context.read<DiaryService>();
     final LlmService llm = context.read<LlmService>();
+    // Задание «Вечерняя заметка» (v1.7.0).
+    context.read<QuestService>().addProgress('diary_1', 1);
     _controller.clear();
     FocusScope.of(context).unfocus();
     showModalBottomSheet<void>(

@@ -23,6 +23,7 @@ export function ShopScreen({ onClose }: { onClose: () => void }) {
   const pets = useTTG((s) => s.pets);
   const buyFrame = useTTG((s) => s.buyFrame);
   const buyFreeze = useTTG((s) => s.buyFreeze);
+  const addQuestProgress = useTTG((s) => s.addQuestProgress);
 
   const active = pets.find((p) => petStage(p) < 3) ?? null;
   const FREEZE_PRICE = 200;
@@ -104,6 +105,7 @@ export function ShopScreen({ onClose }: { onClose: () => void }) {
                       style={{ backgroundColor: f.price === 0 ? C.inkSoft : C.green }}
                       onClick={() => {
                         const ok = buyFrame(f.id, f.price);
+                        if (ok) addQuestProgress("shop_1", 1);
                         toast(ok ? `Рамка «${f.title}» надета!` : "Не хватает монеток 🪙");
                       }}
                     >
@@ -138,6 +140,7 @@ export function ShopScreen({ onClose }: { onClose: () => void }) {
               style={{ backgroundColor: C.blue }}
               onClick={() => {
                 const ok = buyFreeze();
+                if (ok) addQuestProgress("shop_1", 1);
                 toast(
                   ok
                     ? "Заморозка 🧊 куплена! Серия спасена от пропуска."

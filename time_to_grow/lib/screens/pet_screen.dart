@@ -3,8 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
 import '../models/pet.dart';
+import '../models/quest.dart';
 import '../services/focus_session_service.dart';
 import '../services/pet_service.dart';
+import '../services/quest_service.dart';
+import '../services/sleep_service.dart';
+import '../services/weather_service.dart';
 import '../widgets/common.dart';
 import '../widgets/pet_canvas.dart';
 import 'pet_selection_screen.dart';
@@ -12,8 +16,22 @@ import 'feeding_game_screen.dart';
 import 'shop_screen.dart';
 
 /// Главный экран: сцена с питомцем + управление сессией детокса.
-class PetScreen extends StatelessWidget {
+class PetScreen extends StatefulWidget {
   const PetScreen({super.key});
+
+  @override
+  State<PetScreen> createState() => _PetScreenState();
+}
+
+class _PetScreenState extends State<PetScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      if (!mounted) return;
+      context.read<QuestService>().ensureToday();
+    });
+  }
 
   String _fmt(Duration d) {
     final int h = d.inHours;
@@ -27,7 +45,11 @@ class PetScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final PetService pet = context.watch<PetService>();
     final FocusSessionService session = context.watch<FocusSessionService>();
+    final QuestService quests = context.watch<QuestService>();
+    final SleepService sleep = context.watch<SleepService>();
+    final WeatherService weather = context.watch<WeatherService>();
     final Pet? active = pet.activePet;
+    final SeasonEvent season = seasonOf(DateTime.now());
 
     return Scaffold(
       appBar: AppBar(
@@ -88,6 +110,7 @@ class PetScreen extends StatelessWidget {
                       child: PetCanvas(
                         pets: pet.pets,
                         sleeping: session.isRunning,
+                        weather: weather.sceneKey,
                         frame: active?.frame ?? 'none',
                       ),
                     ),
@@ -148,6 +171,27 @@ class PetScreen extends StatelessWidget {
                       else
                         _idleCard(context, active),
                       const SizedBox(height: 12),
+                      // Сезонное событие (v1.7.0).
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3D6),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFFD98A)),
+                        ),
+                        child: Text(
+                          '${season.emoji} ${season.title}: ${season.description}',
+                          style: const TextStyle(
+                              fontSize: 12.5, color: Palette.ink),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _questsCard(quests),
+                      const SizedBox(height: 12),
+                      _sleepCard(context, sleep, quests),
+                      const SizedBox(height: 12),
                       InfoCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,6 +222,131 @@ class PetScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _questsCard(QuestService quests) {
+    return InfoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Expanded(
+                child: Text('Задания дня',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+              Text(
+                '${quests.todayQuests.where((Quest q) => quests.isClaimed(q)).length}/3',
+                style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Palette.inkSoft),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final Quest q in quests.todayQuests) ...<Widget>[
+            Row(
+              children: <Widget>[
+                Text(q.emoji, style: const TextStyle(fontSize: 20)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        q.title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 13.5),
+                      ),
+                      Text(
+                        quests.isClaimed(q)
+                            ? 'Награда получена: +${q.rewardCoins} 🪙 +${q.rewardXp} XP'
+                            : '${q.hint} · ${quests.progress[q.id] ?? 0}/${q.target}',
+                        style: const TextStyle(
+                            fontSize: 11.5, color: Palette.inkSoft),
+                      ),
+                    ],
+                  ),
+                ),
+                if (quests.isClaimed(q))
+                  const Icon(Icons.check_circle_rounded,
+                      color: Palette.green, size: 22)
+                else if (quests.isComplete(q))
+                  TextButton.icon(
+                    onPressed: () => quests.claim(q),
+                    icon: const Icon(Icons.redeem_rounded, size: 16),
+                    label: const Text('Забрать',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: LinearProgressIndicator(
+                value: ((quests.progress[q.id] ?? 0) / q.target)
+                    .clamp(0.0, 1.0),
+                minHeight: 6,
+                backgroundColor: const Color(0xFFEFF4EC),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                    Palette.green),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _sleepCard(
+      BuildContext context, SleepService sleep, QuestService quests) {
+    final bool tucked = sleep.tuckedInToday;
+    return InfoCard(
+      child: Row(
+        children: <Widget>[
+          const Text('🌙', style: TextStyle(fontSize: 26)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text('Уложить питомца спать',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14.5)),
+                Text(
+                  tucked
+                      ? 'Уже спит сладким сном. До завтра! (+$kXpPerTuckIn XP получено)'
+                      : 'Вечерний ритуал: питомец уснёт ЛЕЖА и получит +$kXpPerTuckIn XP',
+                  style: const TextStyle(
+                      fontSize: 12, color: Palette.inkSoft),
+                ),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: tucked
+                ? null
+                : () {
+                    if (sleep.tuckIn()) {
+                      quests.addProgress('tuck_in', 1);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Питомец уснул 😴 +$kXpPerTuckIn XP')),
+                      );
+                    }
+                  },
+            icon: Icon(
+                tucked ? Icons.nights_stay_rounded : Icons.bedtime_rounded,
+                size: 18),
+            label: Text(tucked ? 'Спит' : 'Уложить',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
       ),
     );
   }

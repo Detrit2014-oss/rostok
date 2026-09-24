@@ -13,6 +13,8 @@ import {
   petStage,
   stageProgress,
 } from "@/lib/ttg/types";
+import { dailyQuests, seasonOf, XP_PER_TUCK_IN } from "@/lib/ttg/quests";
+import { useWeather } from "@/lib/ttg/use-weather";
 import { formatTimer } from "@/lib/ttg/format";
 import { PetScene } from "./scene";
 import { BigButton, Chip, InfoCard, ProgressBar } from "./widgets";
@@ -46,10 +48,27 @@ export function PetScreen() {
   const countedSec = useTTG((s) => s.countedSec);
   const awaySinceMs = useTTG((s) => s.awaySinceMs);
   const timeMachine = useTTG((s) => s.timeMachine);
+  const buyFrame = useTTG((s) => s.buyFrame);
+  const addQuestProgress = useTTG((s) => s.addQuestProgress);
+  const claimQuest = useTTG((s) => s.claimQuest);
+  const tuckIn = useTTG((s) => s.tuckIn);
+  const questProgress = useTTG((s) => s.questProgress);
+  const questClaimed = useTTG((s) => s.questClaimed);
+  const questDay = useTTG((s) => s.questDay);
+  const tuckInDay = useTTG((s) => s.tuckInDay);
+  const weatherCondition = useTTG((s) => s.weatherCondition);
   const startSession = useTTG((s) => s.startSession);
   const stopSession = useTTG((s) => s.stopSession);
   const openPetChoice = useTTG((s) => s.openPetChoice);
   const renamePet = useTTG((s) => s.renamePet);
+
+  // Погода (v1.7.0): GPS → Open-Meteo, иначе погода по дате.
+  useWeather();
+
+  const today = new Date();
+  const dayK = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const quests = dailyQuests(questDay || dayK);
+  const season = seasonOf(new Date());
 
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -97,7 +116,12 @@ export function PetScreen() {
       {/* Сцена */}
       <div className="min-h-[190px] shrink-0 px-3 pt-2" style={{ height: "34%" }}>
         <div className="h-full w-full overflow-hidden rounded-[18px] border-2 bg-white" style={{ borderColor: C.border }}>
-          <PetScene pets={pets} sleeping={running} frame={active?.frame ?? "none"} />
+          <PetScene
+            pets={pets}
+            sleeping={running}
+            weather={weatherCondition === "clear" ? null : weatherCondition}
+            frame={active?.frame ?? "none"}
+          />
         </div>
       </div>
 
@@ -236,6 +260,99 @@ export function PetScreen() {
             )}
           </InfoCard>
         )}
+
+        <InfoCard>
+          {/* Сезонное событие (v1.7.0) */}
+          <div
+            className="rounded-2xl px-3.5 py-2.5 text-[12.5px]"
+            style={{ backgroundColor: "#FFF3D6", border: "2px solid #FFD98A", color: C.ink }}
+          >
+            {season.emoji} {season.title}: {season.description}
+          </div>
+
+          {/* Задания дня (v1.7.0) */}
+          <div className="mt-3 flex items-center">
+            <span className="flex-1 text-[15px] font-extrabold" style={{ color: C.ink }}>
+              Задания дня
+            </span>
+            <span className="text-[12.5px] font-bold" style={{ color: C.inkSoft }}>
+              {quests.filter((q) => questClaimed.includes(q.id)).length}/3
+            </span>
+          </div>
+          <div className="mt-2 space-y-2.5">
+            {quests.map((q) => {
+              const claimed = questClaimed.includes(q.id);
+              const prog = Math.min(q.target, questProgress[q.id] ?? 0);
+              const complete = prog >= q.target;
+              return (
+                <div key={q.id}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[20px]">{q.emoji}</span>
+                    <div className="flex-1">
+                      <p className="text-[13.5px] font-bold" style={{ color: C.ink }}>
+                        {q.title}
+                      </p>
+                      <p className="text-[11.5px]" style={{ color: C.inkSoft }}>
+                        {claimed
+                          ? `Награда получена: +${q.rewardCoins} 🪙 +${q.rewardXp} XP`
+                          : `${q.hint} · ${prog}/${q.target}`}
+                      </p>
+                    </div>
+                    {claimed ? (
+                      <CheckCircle2 size={22} style={{ color: C.green }} />
+                    ) : complete ? (
+                      <button
+                        type="button"
+                        className="rounded-xl px-3 py-1.5 text-[12.5px] font-extrabold text-white transition-transform active:scale-95"
+                        style={{ backgroundColor: C.green }}
+                        onClick={() => {
+                          if (claimQuest(q.id)) toast(`Награда: +${q.rewardCoins} 🪙 +${q.rewardXp} XP`);
+                        }}
+                      >
+                        Забрать
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-1.5 h-[6px] overflow-hidden rounded-full" style={{ backgroundColor: "#EFF4EC" }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${(prog / q.target) * 100}%`, backgroundColor: C.green }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Сон (v1.7.0) — питомец спит ЛЕЖА */}
+          <div className="mt-3.5 flex items-center gap-3">
+            <span className="text-[24px]">🌙</span>
+            <div className="flex-1">
+              <p className="text-[14.5px] font-extrabold" style={{ color: C.ink }}>
+                Уложить питомца спать
+              </p>
+              <p className="text-[12px] leading-snug" style={{ color: C.inkSoft }}>
+                {tuckInDay === dayK
+                  ? `Уже спит сладким сном. До завтра! (+${XP_PER_TUCK_IN} XP получено)`
+                  : `Вечерний ритуал: питомец уснёт лёжа и получит +${XP_PER_TUCK_IN} XP`}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={tuckInDay === dayK}
+              className="rounded-xl px-3.5 py-2 text-[13px] font-extrabold text-white transition-transform active:scale-95 disabled:opacity-50"
+              style={{ backgroundColor: C.purple }}
+              onClick={() => {
+                if (tuckIn()) {
+                  addQuestProgress("tuck_in", 1);
+                  toast(`Питомец уснул 😴 +${XP_PER_TUCK_IN} XP`);
+                }
+              }}
+            >
+              {tuckInDay === dayK ? "Спит" : "Уложить"}
+            </button>
+          </div>
+        </InfoCard>
 
         <InfoCard>
           <div className="flex items-center">

@@ -5,7 +5,10 @@ import '../core/app_version.dart';
 import '../core/theme.dart';
 import '../core/utils.dart';
 import '../models/achievement.dart';
+import '../models/quest.dart';
 import '../services/achievement_service.dart';
+import '../services/quest_service.dart';
+import '../services/weather_service.dart';
 import '../services/challenge_service.dart';
 import '../services/diary_service.dart';
 import '../services/focus_session_service.dart';
@@ -229,6 +232,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final UpdateService update = context.watch<UpdateService>();
     final LlmService llm = context.watch<LlmService>();
     final AchievementService achievements = context.watch<AchievementService>();
+    final QuestService questService = context.watch<QuestService>();
+    final WeatherService weather = context.watch<WeatherService>();
+    final PostcardStats stats = PostcardStats.fromPets(
+      pets: pet.pets,
+      totalMinutes: pet.totalMinutes,
+      streakDays: pet.streakDays,
+      coins: pet.coins,
+      questsDone: questService.questsDoneTotal,
+      diaryCount: diary.entries.length,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Профиль')),
@@ -340,6 +353,117 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                         ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            InfoCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      const Expanded(
+                        child: Text('Открытки',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 16)),
+                      ),
+                      Text(
+                        '${kPostcards.where((Postcard pc) => postcardUnlocked(pc, stats)).length}/${kPostcards.length}',
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: Palette.inkSoft),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      for (final Postcard pc in kPostcards)
+                        Tooltip(
+                          message: postcardUnlocked(pc, stats)
+                              ? '${pc.title} — ${pc.howTo}'
+                              : '${pc.title} — ${pc.howTo}',
+                          child: Opacity(
+                            opacity: postcardUnlocked(pc, stats) ? 1 : 0.32,
+                            child: Container(
+                              width: 52,
+                              height: 62,
+                              decoration: BoxDecoration(
+                                color: postcardUnlocked(pc, stats)
+                                    ? Colors.white
+                                    : const Color(0xFFF4F4F4),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: postcardUnlocked(pc, stats)
+                                      ? Palette.green
+                                      : Palette.border,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Text(pc.emoji,
+                                      style: const TextStyle(fontSize: 22)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    pc.title,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 7.5),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            InfoCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('Погода в мире',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${weatherEmoji(weather.condition)} ${weatherLabel(weather.condition)}'
+                    '${weather.cityLabel != null ? ' · ${weather.cityLabel}' : ''}'
+                    '${weather.error != null ? ' · ${weather.error}' : ''}',
+                    style: const TextStyle(
+                        fontSize: 13.5, color: Palette.ink),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      ChoiceChip(
+                        label: const Text('Авто (GPS)'),
+                        selected: weather.mode == 'auto',
+                        onSelected: (_) => weather.setMode('auto'),
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      ChoiceChip(
+                        label: const Text('По дате'),
+                        selected: weather.mode == 'date',
+                        onSelected: (_) => weather.setMode('date'),
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ],
                   ),
                 ],
@@ -522,5 +646,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+}
+
+String weatherEmoji(WeatherCondition c) {
+  switch (c) {
+    case WeatherCondition.clear:
+      return '☀️';
+    case WeatherCondition.partly:
+      return '⛅';
+    case WeatherCondition.cloudy:
+      return '☁️';
+    case WeatherCondition.fog:
+      return '🌫️';
+    case WeatherCondition.rain:
+      return '🌧️';
+    case WeatherCondition.snow:
+      return '❄️';
+    case WeatherCondition.thunder:
+      return '⛈️';
+  }
+}
+
+String weatherLabel(WeatherCondition c) {
+  switch (c) {
+    case WeatherCondition.clear:
+      return 'Ясно';
+    case WeatherCondition.partly:
+      return 'Переменная облачность';
+    case WeatherCondition.cloudy:
+      return 'Облачно';
+    case WeatherCondition.fog:
+      return 'Туман';
+    case WeatherCondition.rain:
+      return 'Дождь';
+    case WeatherCondition.snow:
+      return 'Снег';
+    case WeatherCondition.thunder:
+      return 'Гроза';
   }
 }

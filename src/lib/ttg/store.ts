@@ -25,6 +25,7 @@ import {
   petStage,
 } from "./types";
 import type { PetType } from "./types";
+import { dailyQuests, QUEST_POOL, XP_PER_TUCK_IN } from "./quests";
 import { moodAnalyze } from "./moodai";
 import { compareVersions, dayKey, mondayMs, nextVersion, seededRandom, stringHash } from "./format";
 
@@ -52,6 +53,15 @@ interface TTGState {
   coins: number;
   /** Заморозки серии 🧊 (v1.7.0), максимум 2. */
   freezes: number;
+
+  // ── Задания / сон / погода (v1.7.0) ──
+  questDay: string;
+  questProgress: Record<string, number>;
+  questClaimed: string[];
+  questsDoneTotal: number;
+  tuckInDay: string;
+  weatherMode: "auto" | "date";
+  weatherCondition: string; // clear|partly|cloudy|fog|rain|snow|thunder
   todayKey: string;
   lastSessionDayKey: string;
   weekKey: string;
@@ -105,6 +115,12 @@ interface TTGState {
   buyFrame: (frameId: string, price: number) => boolean;
   /** Купить заморозку серии 🧊; false — лимит/не хватает монет. */
   buyFreeze: () => boolean;
+  /** Прогресс ежедневных заданий (v1.7.0). */
+  addQuestProgress: (questId: string, amount: number) => void;
+  claimQuest: (questId: string) => boolean;
+  tuckIn: () => boolean;
+  setWeatherMode: (m: "auto" | "date") => void;
+  setWeatherCondition: (c: string) => void;
   setTimeMachine: (v: boolean) => void;
   addDiaryEntry: (text: string) => DiaryEntry;
   applyLlmReply: (id: string, reply: string) => void;
@@ -177,6 +193,15 @@ export const useTTG = create<TTGState>()(
       weekMinutes: 0,
       coins: 0,
       freezes: 0,
+
+      questDay: "",
+      questProgress: {},
+      questClaimed: [],
+      questsDoneTotal: 0,
+      tuckInDay: "",
+      weatherMode: "auto",
+      weatherCondition: "clear",
+
       todayKey: "",
       lastSessionDayKey: "",
       weekKey: "",
@@ -335,6 +360,15 @@ export const useTTG = create<TTGState>()(
           weekMinutes: s.weekMinutes + minutes,
           // Монетки (v1.5.0): 1 минута = 1 монетка.
           coins: (s.coins ?? 0) + minutes,
+          // Задания session_10/session_30 (v1.7.0): минуты капают в прогресс.
+          questProgress: (() => {
+            const day = dayKey(new Date());
+            const qp = s.questDay === day ? { ...s.questProgress } : {};
+            qp.session_10 = (qp.session_10 ?? 0) + minutes;
+            qp.session_30 = (qp.session_30 ?? 0) + minutes;
+            return qp;
+          })(),
+          questDay: dayKey(new Date()),
           streakDays,
           lastSessionDayKey,
           weekly: s.weekly
@@ -390,6 +424,70 @@ export const useTTG = create<TTGState>()(
         set({ coins: s.coins - 200, freezes: s.freezes + 1 });
         return true;
       },
+
+      // ── Задания дня (v1.7.0) ──────────────────────────────────────
+      addQuestProgress: (questId, amount) => {
+        const s = get();
+        const day = dayKey(new Date());
+        let questProgress = s.questProgress;
+        let questClaimed = s.questClaimed;
+        let questDay = s.questDay;
+        if (questDay !== day) {
+          // Новый день — прогресс сбрасывается.
+          questDay = day;
+          questProgress = {};
+          questClaimed = [];
+        }
+        if (questClaimed.includes(questId)) return;
+        const q = QUEST_POOL.find((x) => x.id === questId);
+        if (!q) return;
+        const cur = questProgress[questId] ?? 0;
+        if (cur >= q.target) return;
+        set({
+          questDay,
+          questProgress: { ...questProgress, [questId]: cur + amount },
+          questClaimed,
+        });
+      },
+
+      claimQuest: (questId) => {
+        const s = get();
+        const day = dayKey(new Date());
+        const questDay = s.questDay || day;
+        const claimed = s.questClaimed.filter((x) => questDay === day ? true : false);
+        const list = questDay === day ? s.questClaimed : [];
+        void claimed;
+        const q = QUEST_POOL.find((x) => x.id === questId);
+        if (!q) return false;
+        if (list.includes(questId)) return false;
+        const progress = questDay === day ? s.questProgress : {};
+        if ((progress[questId] ?? 0) < q.target) return false;
+        set({
+          questClaimed: [...list, questId],
+          questsDoneTotal: s.questsDoneTotal + 1,
+          coins: s.coins + q.rewardCoins,
+          pets: s.pets.map((p) =>
+            petStage(p) < 3 ? { ...p, xp: (p.xp ?? 0) + q.rewardXp } : p
+          ),
+        });
+        return true;
+      },
+
+      tuckIn: () => {
+        const s = get();
+        const day = dayKey(new Date());
+        if (s.tuckInDay === day) return false;
+        set({
+          tuckInDay: day,
+          pets: s.pets.map((p) =>
+            petStage(p) < 3 ? { ...p, xp: (p.xp ?? 0) + XP_PER_TUCK_IN } : p
+          ),
+        });
+        return true;
+      },
+
+      setWeatherMode: (m) => set({ weatherMode: m }),
+      setWeatherCondition: (c) => set({ weatherCondition: c }),
 
       setTimeMachine: (v) => set({ timeMachine: v }),
 
@@ -532,6 +630,11 @@ export const useTTG = create<TTGState>()(
           weekMinutes: 0,
           coins: 0,
           freezes: 0,
+          questDay: "",
+          questProgress: {},
+          questClaimed: [],
+          questsDoneTotal: 0,
+          tuckInDay: "",
           lastSessionDayKey: "",
           sessionStartedAt: null,
           countedSec: 0,
@@ -546,7 +649,7 @@ export const useTTG = create<TTGState>()(
     }),
     {
       name: "ttg-web-state-v1",
-      version: 2,
+      version: 3,
       partialize: (s) => ({
         pets: s.pets,
         totalMinutes: s.totalMinutes,
@@ -555,6 +658,12 @@ export const useTTG = create<TTGState>()(
         weekMinutes: s.weekMinutes,
         coins: s.coins,
         freezes: s.freezes,
+        questDay: s.questDay,
+        questProgress: s.questProgress,
+        questClaimed: s.questClaimed,
+        questsDoneTotal: s.questsDoneTotal,
+        tuckInDay: s.tuckInDay,
+        weatherMode: s.weatherMode,
         todayKey: s.todayKey,
         lastSessionDayKey: s.lastSessionDayKey,
         weekKey: s.weekKey,
@@ -579,6 +688,24 @@ export const useTTG = create<TTGState>()(
           s.needsPetChoice = !s.pets || s.pets.length === 0;
           s.countedSec = 0;
           s.awaySinceMs = null;
+        }
+        if (version < 3) {
+          // v3 (v1.5.0–v1.7.0): XP-экономика, монеты, заморозки,
+          // задания, сон, погода. Прежние питомцы получают xp=0.
+          s.pets = (s.pets ?? []).map((p) => ({
+            ...p,
+            xp: p.xp ?? 0,
+            frame: p.frame ?? "none",
+          }));
+          s.coins = s.coins ?? 0;
+          s.freezes = s.freezes ?? 0;
+          s.questDay = s.questDay ?? "";
+          s.questProgress = s.questProgress ?? {};
+          s.questClaimed = s.questClaimed ?? [];
+          s.questsDoneTotal = s.questsDoneTotal ?? 0;
+          s.tuckInDay = s.tuckInDay ?? "";
+          s.weatherMode = s.weatherMode ?? "auto";
+          s.weatherCondition = s.weatherCondition ?? "clear";
         }
         return s as TTGState;
       },

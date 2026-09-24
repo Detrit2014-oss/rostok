@@ -38,6 +38,8 @@ import {
   type AchievementStatsInput,
   computeUnlocked,
 } from "@/lib/ttg/achievements";
+import { POSTCARDS, postcardUnlocked } from "@/lib/ttg/quests";
+import { useWeather, deterministicWeather } from "@/lib/ttg/use-weather";
 import { useMemo } from "react";
 
 function AchievementsCard() {
@@ -84,6 +86,121 @@ function AchievementsCard() {
       </div>
     </InfoCard>
   );
+}
+
+function PostcardsCard() {
+  const pets = useTTG((s) => s.pets);
+  const totalMinutes = useTTG((s) => s.totalMinutes);
+  const streakDays = useTTG((s) => s.streakDays);
+  const coins = useTTG((s) => s.coins);
+  const diaryCount = useTTG((s) => s.diaryEntries.length);
+  const questsDoneTotal = useTTG((s) => s.questsDoneTotal);
+
+  const st = { pets, totalMinutes, streakDays, coins, questsDone: questsDoneTotal, diaryCount };
+  const unlockedCount = POSTCARDS.filter((pc) => postcardUnlocked(pc.id, st)).length;
+
+  return (
+    <InfoCard className="mt-4">
+      <div className="flex items-center">
+        <p className="flex-1 text-[16px] font-extrabold" style={{ color: C.ink }}>
+          Открытки
+        </p>
+        <p className="text-[12.5px] font-bold" style={{ color: C.inkSoft }}>
+          {unlockedCount}/{POSTCARDS.length}
+        </p>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {POSTCARDS.map((pc) => {
+          const on = postcardUnlocked(pc.id, st);
+          return (
+            <div
+              key={pc.id}
+              title={`${pc.title} — ${pc.howTo}`}
+              className="flex h-[62px] w-[52px] flex-col items-center justify-center rounded-[10px] border-2"
+              style={{
+                opacity: on ? 1 : 0.32,
+                backgroundColor: on ? "#FFFFFF" : "#F4F4F4",
+                borderColor: on ? C.green : C.border,
+              }}
+            >
+              <span className="text-[22px]">{pc.emoji}</span>
+              <span className="px-0.5 text-center text-[7.5px] leading-tight" style={{ color: C.ink }}>
+                {pc.title}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </InfoCard>
+  );
+}
+
+const WEATHER_LABELS: Record<string, string> = {
+  clear: "Ясно",
+  partly: "Переменная облачность",
+  cloudy: "Облачно",
+  fog: "Туман",
+  rain: "Дождь",
+  snow: "Снег",
+  thunder: "Гроза",
+};
+
+const WEATHER_EMOJI: Record<string, string> = {
+  clear: "☀️",
+  partly: "⛅",
+  cloudy: "☁️",
+  fog: "🌫️",
+  rain: "🌧️",
+  snow: "❄️",
+  thunder: "⛈️",
+};
+
+function WeatherCard() {
+  const weatherMode = useTTG((s) => s.weatherMode);
+  const weatherCondition = useTTG((s) => s.weatherCondition);
+  const setWeatherMode = useTTG((s) => s.setWeatherMode);
+
+  // Подтягиваем реальную погоду в режиме «Авто».
+  useWeather();
+  const shown = weatherMode === "date"
+    ? deterministicWeather(dayKeyToday())
+    : weatherCondition;
+
+  return (
+    <InfoCard className="mt-4">
+      <p className="text-[16px] font-extrabold" style={{ color: C.ink }}>
+        Погода в мире
+      </p>
+      <p className="mt-1 text-[13.5px]" style={{ color: C.ink }}>
+        {WEATHER_EMOJI[shown] ?? "☀️"} {WEATHER_LABELS[shown] ?? "Ясно"}
+      </p>
+      <p className="mt-0.5 text-[11.5px]" style={{ color: C.inkSoft }}>
+        В режиме «Авто» сцена питомца повторяет погоду за окном (Open-Meteo).
+      </p>
+      <div className="mt-2 flex gap-2">
+        {(["auto", "date"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setWeatherMode(m)}
+            className="rounded-full px-3.5 py-1.5 text-[12.5px] font-extrabold"
+            style={{
+              backgroundColor: weatherMode === m ? C.green : "#FFFFFF",
+              color: weatherMode === m ? "#FFFFFF" : C.inkSoft,
+              border: `2px solid ${weatherMode === m ? C.greenDark : C.border}`,
+            }}
+          >
+            {m === "auto" ? "Авто (GPS)" : "По дате"}
+          </button>
+        ))}
+      </div>
+    </InfoCard>
+  );
+}
+
+function dayKeyToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function ProfileScreen() {
@@ -163,6 +280,12 @@ export function ProfileScreen() {
 
       {/* Достижения (v1.5.0) */}
       <AchievementsCard />
+
+      {/* Открытки (v1.7.0) */}
+      <PostcardsCard />
+
+      {/* Погода в мире (v1.7.0) */}
+      <WeatherCard />
 
       {/* Обновления */}
       <InfoCard className="mt-4">
