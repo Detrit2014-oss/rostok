@@ -46,9 +46,30 @@ local-*
 *.log
 dev.log
 dev.out.log
-test
-prompt
+/test
+/prompt
 
 server.log
-# Skills directory
+# Skills directory (internal tooling)
 /skills/
+# User uploads (screenshots etc.) — not part of the app source
+/upload/
+
+# ===== Flutter (time_to_grow) =====
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+*.iml
+*.ipr
+*.iws
