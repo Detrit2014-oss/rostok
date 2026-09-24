@@ -1,7 +1,7 @@
 {
   "latest_version": "2.3.0",
   "min_supported_version": "1.0.0",
-  "notes": "Что нового в 2.3.0 (демо-обновление): следующий шаг «Ростка».",
+  "notes": "Что нового в 2.3.0 (демо-обновление): мультяшный движок зверей — кодовая отрисовка и анимация 1:1 с Flutter.",
   "force_update": false,
   "android_url": "https://play.google.com/store/apps/details?id=REPLACE_ME",
   "ios_url": "https://apps.apple.com/app/REPLACE_ME"

@@ -1,21 +1,19 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../data/cartoon.dart';
 import '../data/species_style.dart';
-import '../data/sprite_meta.dart';
 import '../models/pet.dart';
-import 'sprite_cache.dart';
+import 'cartoon_pet.dart';
 
-/// Анимированная сцена «Ростка» v2.1.0 «Настоящие звери».
+/// Анимированная сцена «Ростка» v2.2.0 «Мультяшные звери».
 ///
-/// Питомцы больше не рисуются фигурами вручную: каждый вид — реалистичная
-/// иллюстрация-спрайт (assets/sprites/<вид>.webp) в едином стиле, а сцена
-/// оживляет её повадками: зверь гуляет по лужайке, принюхивается, щиплет
-/// траву, садится; птицы клюют зёрнышки; зайчик прыгает; водные жители
-/// плавают в пруду; растения качаются на грядке. Спящие звери ЛЕЖАТ —
-/// отдельная поза сна в том же стиле. Яйцо и семечко остались процедурными.
+/// Все 30 видов нарисованы кодом в мультяшном стиле (cartoon_pet.dart) и
+/// ЖИВУТ: звери гуляют по лужайке с настоящей походкой (лапы, хвост,
+/// уши), на паузах принюхиваются, щиплют траву, сидят; птицы клюют;
+/// зайчик прыгает; водные жители плавают в пруду; растения качаются на
+/// грядке. Спящие звери ЛЕЖАТ. Яйцо и семечко остались процедурными.
 class PetCanvas extends StatefulWidget {
   const PetCanvas({
     super.key,
@@ -27,7 +25,7 @@ class PetCanvas extends StatefulWidget {
 
   final List<Pet> pets;
 
-  /// true — идёт сессия детокса: питомцы спят в своих позах и «копят» рост.
+  /// true — идёт сессия детокса: питомцы спят и «копят» рост.
   final bool sleeping;
 
   /// Погодное состояние сцены: null|partly|cloudy|fog|rain|snow|thunder.
@@ -53,30 +51,12 @@ class _PetCanvasState extends State<PetCanvas>
     _phase.addStatusListener((AnimationStatus status) {
       if (status == AnimationStatus.completed) _cycle++;
     });
-    _loadMissing();
-  }
-
-  @override
-  void didUpdateWidget(PetCanvas old) {
-    super.didUpdateWidget(old);
-    _loadMissing();
   }
 
   @override
   void dispose() {
     _phase.dispose();
     super.dispose();
-  }
-
-  /// Запрашивает недостающие спрайты: idle + поза сна для всех видов сцены.
-  void _loadMissing() {
-    for (final Pet pet in widget.pets) {
-      final bool sleepPose = widget.sleeping && !isPlant(pet.type);
-      if (pet.stage > 0) {
-        SpriteCache.ensure(spriteAsset(pet.type, sleep: sleepPose),
-            () => mounted ? setState(() {}) : null);
-      }
-    }
   }
 
   @override
@@ -93,7 +73,6 @@ class _PetCanvasState extends State<PetCanvas>
             sleeping: widget.sleeping,
             weather: widget.weather,
             frame: widget.frame,
-            images: SpriteCache.snapshot(),
           ),
         );
       },
@@ -259,7 +238,6 @@ class _PetScenePainter extends CustomPainter {
     required this.sleeping,
     required this.weather,
     required this.frame,
-    required this.images,
   });
 
   final List<Pet> pets;
@@ -270,7 +248,6 @@ class _PetScenePainter extends CustomPainter {
   final bool sleeping;
   final String? weather;
   final String frame;
-  final Map<String, ui.Image> images;
 
   bool get _dimSky =>
       weather == 'cloudy' || weather == 'rain' || weather == 'thunder';
@@ -607,7 +584,7 @@ class _PetScenePainter extends CustomPainter {
     _paintButterflies(canvas, size);
   }
 
-  /// Растения на грядке: семечко (стадия 0) или спрайт с лёгким покачиванием.
+  /// Растения на грядке: семечко (стадия 0) или качающийся питомец.
   void _paintPlants(Canvas canvas, Size size, List<Pet> plants) {
     final double bedY = size.height * SceneGeom.bedYF;
     final double x0 = size.width * SceneGeom.bedX0F;
@@ -621,30 +598,15 @@ class _PetScenePainter extends CustomPainter {
         _paintSeedBed(canvas, base, pet);
         continue;
       }
-      final ui.Image? img = images[spriteAsset(pet.type)];
-      if (img == null) continue;
-
-      final SpriteMeta m = kSpriteMeta[pet.type] ??
-          const SpriteMeta(heightF: 0.14);
-      final double boxH = size.height * m.heightF * spriteStageScale(pet.stage);
-      final double aspect = img.width / img.height;
-      final double boxW = boxH * aspect;
-      // Покачивание от «ветра» + во сне чуть притушены.
+      final double h =
+          size.height * cartoonSpec(pet.type).heightF * cartoonStageScale(pet.stage);
+      // Покачивание от «ветра».
       final double sway =
-          math.sin(tSec * 1.5 + i * 1.9) * 0.035 * (sleeping ? 0.4 : 1.0);
-      _drawSprite(
-        canvas,
-        img,
-        ground: base,
-        boxW: boxW,
-        boxH: boxH,
-        facing: 1,
-        tilt: sway,
-        alpha: sleeping ? 0.88 : 1.0,
-        pet: pet,
-      );
+          math.sin(tSec * 1.5 + i * 1.9) * 0.045 * (sleeping ? 0.4 : 1.0);
+      _drawPet(canvas, pet, base, h,
+          facing: 1, tilt: sway, index: i);
       if (sleeping) {
-        _paintZzz(canvas, base + Offset(boxW * 0.42, -boxH * 0.95), 1.0);
+        _paintZzz(canvas, base + Offset(h * 0.5, -h * 0.95), 1.0);
       }
     }
   }
@@ -655,18 +617,9 @@ class _PetScenePainter extends CustomPainter {
     final (double rw, double rh) = _pondRadii(size);
     for (int i = 0; i < water.length; i++) {
       final Pet pet = water[i];
-      final ui.Image? img =
-          images[spriteAsset(pet.type, sleep: sleeping)];
-      if (img == null) continue;
-      final SpriteMeta m = kSpriteMeta[pet.type] ??
-          const SpriteMeta(heightF: 0.12);
-      final double boxH = size.height * m.heightF * spriteStageScale(pet.stage);
-      final double aspect = img.width / img.height;
-      double boxW = boxH * aspect;
-      if (boxW > rw * 1.25) {
-        boxW = rw * 1.25;
-        boxH = boxW / aspect;
-      }
+      final CartoonSpec spec = cartoonSpec(pet.type);
+      double h = size.height * spec.heightF * cartoonStageScale(pet.stage);
+      if (h * spec.aspect > rw * 1.3) h = rw * 1.3 / spec.aspect;
 
       final int seed = pet.id.hashCode & 0x7fffffff;
       final double off = (seed % 1000) / 100.0;
@@ -681,55 +634,49 @@ class _PetScenePainter extends CustomPainter {
           ? pondC.dy + rh * 0.42 + dy
           : pondC.dy - rh * 0.22 + dy;
 
-      _drawSprite(
-        canvas,
-        img,
-        ground: Offset(pondC.dx + dx, baseY),
-        boxW: boxW,
-        boxH: boxH,
-        facing: goingRight ? 1 : -1,
-        tilt: math.sin(tSec * 1.1 + off) * 0.03,
-        alpha: 1.0,
-        pet: pet,
-        inWater: true,
-      );
+      _drawPet(canvas, pet, Offset(pondC.dx + dx, baseY), h,
+          facing: goingRight ? 1 : -1,
+          tilt: math.sin(tSec * 1.1 + off) * 0.03,
+          sleeping: sleeping,
+          index: i);
 
       // Фонтанчик у кита: каждые ~7 с выдыхает вверх струйку.
       if (pet.type == PetType.whale && !sleeping) {
         final double cyc = (tSec + off) % 7.0;
         if (cyc < 1.4) {
+          final double boxW = h * spec.aspect;
           _paintWhaleFountain(
             canvas,
             Offset(
-              pondC.dx + dx - boxW * 0.28 * (goingRight ? 1 : -1),
-              baseY - boxH * 0.86,
+              pondC.dx + dx - boxW * 0.18 * (goingRight ? 1 : -1),
+              baseY - h * 0.95,
             ),
-            boxH,
+            h,
             cyc / 1.4,
           );
         }
       }
       if (sleeping) {
         _paintZzz(canvas,
-            Offset(pondC.dx + dx + boxW * 0.4, baseY - boxH * 1.0), 1.0);
+            Offset(pondC.dx + dx + h * spec.aspect * 0.4, baseY - h * 1.0), 1.0);
       }
     }
   }
 
   /// Струйка-выдох кита: дуги капель вверх и вниз.
-  void _paintWhaleFountain(Canvas canvas, Offset top, double boxH, double t) {
-    final double h = boxH * (0.16 + 0.14 * math.sin(t * math.pi));
+  void _paintWhaleFountain(Canvas canvas, Offset top, double h, double t) {
+    final double fh = h * (0.16 + 0.14 * math.sin(t * math.pi));
     final Paint jet = Paint()
       ..color = const Color(0xFFBFE6F7).withOpacity(0.85 * (1 - t * 0.6))
       ..strokeWidth = 2.4
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(top, top - Offset(0, h), jet);
+    canvas.drawLine(top, top - Offset(0, fh), jet);
     final Paint drop = Paint()..color = const Color(0xFF9FD4EF);
     for (int i = 0; i < 4; i++) {
       final double dt = (t * 1.3 + i * 0.22) % 1.0;
       final double ang = -0.5 + i * 0.34;
       final Offset d =
-          top - Offset(math.sin(ang) * h * 0.5 * dt, h * 0.9 * dt);
+          top - Offset(math.sin(ang) * fh * 0.5 * dt, fh * 0.9 * dt);
       canvas.drawCircle(d, 1.6, drop..color = drop.color.withOpacity(0.8 * (1 - dt)));
     }
   }
@@ -752,39 +699,20 @@ class _PetScenePainter extends CustomPainter {
         continue;
       }
 
-      final bool hasSleep = kSpriteMeta[pet.type]?.sleep ?? true;
-      final ui.Image? img = images[spriteAsset(pet.type, sleep: sleeping && hasSleep)] ??
-          images[spriteAsset(pet.type)];
-      if (img == null) continue;
-
-      final SpriteMeta m = kSpriteMeta[pet.type] ??
-          const SpriteMeta(heightF: 0.16);
-      final double boxH = size.height *
-          m.heightF *
-          spriteStageScale(pet.stage) *
+      final double h = size.height *
+          cartoonSpec(pet.type).heightF *
+          cartoonStageScale(pet.stage) *
           depthScale;
-      final double aspect = img.width / img.height;
-      final double boxW = boxH * aspect;
 
       if (sleeping) {
-        // Спит на своём месте: поза сна, zzz, дыхание — лёгкое сжатие.
-        final double breath =
-            1.0 + math.sin(tSec * 1.1 + i * 2.0) * 0.012;
+        // Спит на своём месте: лежит с закрытыми глазами, дышит, zzz.
         final Offset spot = Offset(
             size.width * (land.length == 1 ? 0.5 : 0.14 + 0.72 * i / (land.length - 1)),
             laneY);
-        _drawSprite(
-          canvas,
-          img,
-          ground: spot,
-          boxW: boxW * breath,
-          boxH: boxH,
-          facing: 1,
-          tilt: 0,
-          alpha: 1.0,
-          pet: pet,
-        );
-        _paintZzz(canvas, spot + Offset(boxW * 0.44, -boxH * 0.92), depthScale);
+        _paintShadow(canvas, spot, h * cartoonSpec(pet.type).aspect * 0.6);
+        _drawPet(canvas, pet, spot, h, facing: 1, sleeping: true, index: i);
+        _paintZzz(canvas, spot + Offset(h * cartoonSpec(pet.type).aspect * 0.42,
+            -h * 0.55), depthScale);
         continue;
       }
 
@@ -799,45 +727,59 @@ class _PetScenePainter extends CustomPainter {
         // Прыгуны: во время ходьбы перескакивают.
         final double hopP = (tSec * 2 * math.pi / 0.85) % (2 * math.pi);
         final double hop = bhv.kind == 'walk' ? math.sin(hopP).abs() : 0;
-        yLift = -hop * boxH * 0.28;
+        yLift = -hop * h * 0.28;
         tilt = math.sin(hopP + 0.6) * 0.10 * (bhv.kind == 'walk' ? 1 : 0);
       } else if (bhv.kind == 'walk') {
-        tilt = math.sin(bhv.stride) * 0.035; // перекат с шага на шаг
-        yLift = -math.sin(bhv.stride * 2).abs() * boxH * 0.02;
-      } else {
-        switch (bhv.kind) {
-          case 'graze':
-            tilt = 0.14 + math.sin(tSec * 8.5) * 0.03; // нос к траве
-            break;
-          case 'sniff':
-            tilt = 0.07 + math.sin(tSec * 7.0) * 0.02;
-            break;
-          case 'peck':
-            tilt = 0.24 + math.sin(tSec * 9.0) * 0.05;
-            break;
-          case 'look':
-            tilt = -0.02 + math.sin(tSec * 1.6) * 0.025;
-            break;
-          default:
-            tilt = math.sin(tSec * 1.2 + i) * 0.012; // сидит смирно
-        }
+        tilt = math.sin(bhv.stride) * 0.03; // перекат с шага на шаг
+        yLift = -math.sin(bhv.stride * 2).abs() * h * 0.02;
       }
 
       // Мягкая тень.
-      _paintShadow(canvas, ground, boxW * 0.62);
+      _paintShadow(canvas, ground, h * cartoonSpec(pet.type).aspect * 0.55);
 
-      _drawSprite(
-        canvas,
-        img,
-        ground: ground.translate(0, yLift),
-        boxW: boxW,
-        boxH: boxH,
-        facing: bhv.facing,
-        tilt: tilt,
-        alpha: 1.0,
-        pet: pet,
-      );
+      _drawPet(canvas, pet, ground.translate(0, yLift), h,
+          facing: bhv.facing,
+          tilt: tilt,
+          kind: bhv.kind,
+          stride: bhv.stride,
+          headPitch: bhv.headPitch,
+          poseEase: bhv.poseEase,
+          index: i);
     }
+  }
+
+  /// Отрисовка питомца движком: разворот по направлению, наклон, повадки.
+  void _drawPet(
+    Canvas canvas,
+    Pet pet,
+    Offset ground, {
+    required double h,
+    double facing = 1,
+    double tilt = 0,
+    String kind = 'idle',
+    double stride = 0,
+    double headPitch = 0,
+    double poseEase = 0,
+    bool sleeping = false,
+    int index = 0,
+  }) {
+    canvas.save();
+    canvas.translate(ground.dx, ground.dy);
+    canvas.scale(facing, 1);
+    canvas.rotate(tilt);
+    paintCartoonPet(
+      canvas,
+      pet,
+      h,
+      tSec: tSec,
+      kind: kind,
+      stride: stride,
+      headPitch: headPitch,
+      poseEase: poseEase,
+      sleeping: sleeping,
+      index: index,
+    );
+    canvas.restore();
   }
 
   void _paintShadow(Canvas canvas, Offset ground, double w) {
@@ -845,239 +787,6 @@ class _PetScenePainter extends CustomPainter {
       Rect.fromCenter(center: ground + const Offset(0, 2), width: w, height: w * 0.16),
       Paint()..color = const Color(0xFF2E7D32).withOpacity(0.18),
     );
-  }
-
-  /// Спрайт: разворот по направлению, наклон, аксессуары поверх.
-  /// Точка опоры — низ по центру (контакт с землёй).
-  void _drawSprite(
-    Canvas canvas,
-    ui.Image img, {
-    required Offset ground,
-    required double boxW,
-    required double boxH,
-    required double facing,
-    required double tilt,
-    required double alpha,
-    required Pet pet,
-    bool inWater = false,
-  }) {
-    canvas.save();
-    canvas.translate(ground.dx, ground.dy);
-    canvas.scale(facing, 1);
-    canvas.rotate(tilt);
-    final Rect dst = Rect.fromLTWH(-boxW / 2, -boxH, boxW, boxH);
-    final Paint p = Paint()
-      ..filterQuality = FilterQuality.medium
-      ..color = Colors.white.withOpacity(alpha);
-    canvas.drawImageRect(
-      img,
-      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-      dst,
-      p,
-    );
-    if (!sleeping || isPlant(pet.type)) _paintAccessories(canvas, dst, pet);
-    canvas.restore();
-  }
-
-  // ── Аксессуары гардероба поверх спрайта ──────────────────────────────
-  /// Локальное пространство: спрайт смотрит вправо, dst — его прямоугольник.
-  void _paintAccessories(Canvas canvas, Rect dst, Pet pet) {
-    final Anchors a = anchorsFor(pet.type);
-    final double u = dst.width / 100; // единица = 1% ширины спрайта
-    Offset at((double, double) p) =>
-        dst.topLeft + Offset(p.$1 * dst.width, p.$2 * dst.height);
-
-    switch (pet.hat) {
-      case 'cap':
-        _accCap(canvas, at(a.hat), u);
-        break;
-      case 'beanie':
-        _accBeanie(canvas, at(a.hat), u);
-        break;
-      case 'crown':
-        _accCrown(canvas, at(a.hat), u);
-        break;
-      case 'flowerPin':
-        _accFlower(canvas, at(a.hat), u);
-        break;
-      default:
-        break;
-    }
-    switch (pet.neck) {
-      case 'scarf':
-        _accScarf(canvas, at(a.neck), u);
-        break;
-      case 'bow':
-        _accBow(canvas, at(a.neck), u);
-        break;
-      case 'bandana':
-        _accBandana(canvas, at(a.neck), u);
-        break;
-      case 'bell':
-        _accBell(canvas, at(a.neck), u);
-        break;
-      default:
-        break;
-    }
-    switch (pet.face) {
-      case 'glasses':
-        _accGlasses(canvas, at(a.eye), u);
-        break;
-      case 'shades':
-        _accShades(canvas, at(a.eye), u);
-        break;
-      default:
-        break;
-    }
-  }
-
-  void _accCap(Canvas canvas, Offset c, double u) {
-    final Paint red = Paint()..color = const Color(0xFFEF476F);
-    final Path dome = Path()
-      ..moveTo(-14 * u, 0)
-      ..quadraticBezierTo(0, -22 * u, 14 * u, 0)
-      ..close();
-    canvas.drawPath(dome, red);
-    // Козырёк вперёд (морда справа).
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromLTWH(6 * u, -2 * u, 14 * u, 4 * u), const Radius.circular(3)),
-      Paint()..color = const Color(0xFFD63860),
-    );
-    canvas.drawCircle(Offset(0, -12 * u), 2.2 * u, Paint()..color = Colors.white);
-  }
-
-  void _accBeanie(Canvas canvas, Offset c, double u) {
-    canvas.drawPath(
-      Path()
-        ..moveTo(-14 * u, 0)
-        ..quadraticBezierTo(0, -20 * u, 14 * u, 0)
-        ..close(),
-      Paint()..color = const Color(0xFFB892E0),
-    );
-    canvas.drawRect(
-        Rect.fromLTWH(-14 * u, -2 * u, 28 * u, 4.4 * u),
-        Paint()..color = const Color(0xFF9A77C9));
-    canvas.drawCircle(Offset(0, -20 * u), 3.4 * u,
-        Paint()..color = const Color(0xFFF7F1EA));
-  }
-
-  void _accCrown(Canvas canvas, Offset c, double u) {
-    final Paint gold = Paint()
-      ..color = const Color(0xFFFFC800)
-      ..style = PaintingStyle.fill;
-    final Path crown = Path()
-      ..moveTo(-11 * u, 0)
-      ..lineTo(-11 * u, -10 * u)
-      ..lineTo(-5.5 * u, -5 * u)
-      ..lineTo(0, -12 * u)
-      ..lineTo(5.5 * u, -5 * u)
-      ..lineTo(11 * u, -10 * u)
-      ..lineTo(11 * u, 0)
-      ..close();
-    canvas.drawPath(crown, gold);
-    canvas.drawCircle(Offset(0, -3 * u), 1.8 * u,
-        Paint()..color = const Color(0xFFEF476F));
-  }
-
-  void _accFlower(Canvas canvas, Offset c, double u) {
-    final Paint petal = Paint()..color = const Color(0xFFFF8FB1);
-    for (int i = 0; i < 5; i++) {
-      final double ang = i * 2 * math.pi / 5 - math.pi / 2;
-      canvas.drawCircle(
-          c + Offset(math.cos(ang), math.sin(ang)) * 3.4 * u, 2.4 * u, petal);
-    }
-    canvas.drawCircle(c, 2.2 * u, Paint()..color = const Color(0xFFFFD166));
-  }
-
-  void _accScarf(Canvas canvas, Offset c, double u) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromCenter(center: c, width: 26 * u, height: 7 * u),
-          const Radius.circular(3.5 * u)),
-      Paint()..color = const Color(0xFFEF6461),
-    );
-    // Свисающий кончик.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromLTWH(-12 * u, c.dy, 7 * u, 15 * u),
-          const Radius.circular(3 * u)),
-      Paint()..color = const Color(0xFFD63860),
-    );
-  }
-
-  void _accBow(Canvas canvas, Offset c, double u) {
-    final Paint pink = Paint()..color = const Color(0xFFFF6FA5);
-    canvas.drawCircle(c, 2.6 * u, Paint()..color = const Color(0xFFE85D8A));
-    final Path l = Path()
-      ..moveTo(c.dx, c.dy)
-      ..lineTo(c.dx - 12 * u, c.dy - 7 * u)
-      ..quadraticBezierTo(c.dx - 15 * u, c.dy, c.dx - 12 * u, c.dy + 7 * u)
-      ..close();
-    final Path r = Path()
-      ..moveTo(c.dx, c.dy)
-      ..lineTo(c.dx + 12 * u, c.dy - 7 * u)
-      ..quadraticBezierTo(c.dx + 15 * u, c.dy, c.dx + 12 * u, c.dy + 7 * u)
-      ..close();
-    canvas.drawPath(l, pink);
-    canvas.drawPath(r, pink);
-  }
-
-  void _accBandana(Canvas canvas, Offset c, double u) {
-    final Paint blue = Paint()..color = const Color(0xFF3E7BFA);
-    final Path kerchief = Path()
-      ..moveTo(-13 * u, c.dy - 3 * u)
-      ..lineTo(13 * u, c.dy - 3 * u)
-      ..lineTo(0, c.dy + 11 * u)
-      ..close();
-    canvas.drawPath(kerchief, blue);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromCenter(
-              center: Offset(c.dx, c.dy - 3 * u), width: 26 * u, height: 5 * u),
-          const Radius.circular(2.5 * u)),
-      Paint()..color = const Color(0xFF2F63D6),
-    );
-  }
-
-  void _accBell(Canvas canvas, Offset c, double u) {
-    final Paint gold = Paint()..color = const Color(0xFFFFC800);
-    canvas.drawCircle(c + Offset(0, 5 * u), 4.6 * u, gold);
-    canvas.drawCircle(
-        c + Offset(0, 5 * u), 2.1 * u, Paint()..color = const Color(0xFFE09E00));
-    canvas.drawCircle(c + Offset(0, 3.4 * u), 1.1 * u, Paint()..color = Colors.white);
-    // Ремешок.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromCenter(center: c, width: 24 * u, height: 3.6 * u),
-          const Radius.circular(2 * u)),
-      Paint()..color = const Color(0xFFD63860),
-    );
-  }
-
-  void _accGlasses(Canvas canvas, Offset c, double u) {
-    final Paint rim = Paint()
-      ..color = const Color(0xFF3A3A3A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8 * u;
-    canvas.drawCircle(c, 5.2 * u, rim);
-    canvas.drawLine(
-        c + Offset(5.2 * u, 0), c + Offset(11 * u, -1.5 * u), rim);
-  }
-
-  void _accShades(Canvas canvas, Offset c, double u) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromCenter(center: c, width: 11 * u, height: 8 * u),
-          const Radius.circular(3 * u)),
-      Paint()..color = const Color(0xFF23262B),
-    );
-    canvas.drawLine(
-        c + Offset(5.5 * u, -1 * u),
-        c + Offset(11 * u, -2.5 * u),
-        Paint()
-          ..color = const Color(0xFF23262B)
-          ..strokeWidth = 1.8 * u);
   }
 
   // ── Яйцо (звери) и семечко (растения) ────────────────────────────────
@@ -1284,9 +993,7 @@ class _PetScenePainter extends CustomPainter {
       );
       canvas.drawOval(
         Rect.fromCenter(
-            center: Offset(sz * 0.42, sz * 0.28),
-            width: sz * 0.62,
-            height: sz * 0.46),
+            center: Offset(sz * 0.42, sz * 0.28), width: sz * 0.62, height: sz * 0.46),
         Paint()..color = wingB,
       );
       canvas.restore();
@@ -1374,7 +1081,5 @@ class _PetScenePainter extends CustomPainter {
       oldDelegate.pets.length != pets.length ||
       oldDelegate.sleeping != sleeping ||
       oldDelegate.weather != weather ||
-      oldDelegate.frame != frame ||
-      !identical(oldDelegate.images, images);
+      oldDelegate.frame != frame;
 }
-

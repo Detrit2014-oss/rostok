@@ -257,7 +257,7 @@ export const PET_CATALOG: {
   { name: "Росточек", type: "sprout", emoji: "🌱", desc: "Самый первый друг — символ «Ростка»", accusative: "Росточек" },
 ];
 
-export const K_APP_VERSION = "2.2.0";
+export const K_APP_VERSION = "2.3.0";
 export const K_APP_BUILD_NUMBER = 12;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
@@ -418,87 +418,123 @@ export function mixColors(base: string, overlay: string, alpha: number): string 
   return `#${toHex(m(r1, r2))}${toHex(m(g1, g2))}${toHex(m(b1, b2))}`;
 }
 
-// ── Спрайтовая система v2.1.0 «Настоящие звери» ─────────────────────
-// Зеркало lib/data/sprite_meta.dart: размеры видов, якоря аксессуаров,
-// геометрия сцены. Питомцы — реалистичные иллюстрации /sprites/<вид>.webp.
+// ── Мультяшный движок v2.2.0 «Мультяшные звери» ─────────────────────
+// Зеркало lib/data/cartoon.dart: спека 30 видов + геометрия сцены.
+// Рисовальщик (canvas 2D) живёт в cartoon.ts — числа совпадают 1:1.
 
-/** Высота взрослого питомца как доля высоты сцены (240). */
-export interface SpriteMeta {
-  h: number;
-  sleep: boolean;
+/** Спека вида: сборка тела, палитра, уши/хвост/морда, доп. детали. */
+export interface CartoonSpec {
+  build: "quad" | "bird" | "hop" | "pond" | "plant";
+  /** Высота взрослого питомца как доля высоты сцены (240). */
+  heightF: number;
+  /** Отношение ширины к высоте бокса отрисовки. */
+  aspect: number;
+  body: string;
+  belly: string;
+  accent?: string;
+  dark?: string;
+  ear: string;
+  tail: string;
+  muzzle: string;
+  extras: string[];
 }
 
-export const SPRITE_META: Record<PetType, SpriteMeta> = {
-  fox: { h: 0.165, sleep: true },
-  cat: { h: 0.15, sleep: true },
-  dragon: { h: 0.19, sleep: true },
-  bunny: { h: 0.15, sleep: true },
-  hedgehog: { h: 0.125, sleep: true },
-  panda: { h: 0.18, sleep: true },
-  bear: { h: 0.185, sleep: true },
-  dog: { h: 0.17, sleep: true },
-  deer: { h: 0.215, sleep: true },
-  squirrel: { h: 0.15, sleep: true },
-  raccoon: { h: 0.155, sleep: true },
-  koala: { h: 0.155, sleep: true },
-  pig: { h: 0.16, sleep: true },
-  unicorn: { h: 0.215, sleep: true },
-  owl: { h: 0.165, sleep: true },
-  duck: { h: 0.13, sleep: true },
-  chick: { h: 0.105, sleep: true },
-  penguin: { h: 0.155, sleep: true },
-  frog: { h: 0.095, sleep: true },
-  seal: { h: 0.115, sleep: true },
-  whale: { h: 0.125, sleep: true },
-  turtle: { h: 0.085, sleep: true },
-  octopus: { h: 0.13, sleep: true },
-  crab: { h: 0.075, sleep: true },
-  cactus: { h: 0.155, sleep: false },
-  bonsai: { h: 0.2, sleep: false },
-  succulent: { h: 0.115, sleep: false },
-  sunflower: { h: 0.205, sleep: false },
-  clover: { h: 0.115, sleep: false },
-  sprout: { h: 0.12, sleep: false },
+const spec = (
+  build: CartoonSpec["build"],
+  heightF: number,
+  aspect: number,
+  body: string,
+  belly: string,
+  extra: Partial<CartoonSpec> = {},
+): CartoonSpec => ({
+  build,
+  heightF,
+  aspect,
+  body,
+  belly,
+  ear: extra.ear ?? "none",
+  tail: extra.tail ?? "none",
+  muzzle: extra.muzzle ?? "none",
+  accent: extra.accent,
+  dark: extra.dark,
+  extras: extra.extras ?? [],
+});
+
+export const CARTOON: Record<PetType, CartoonSpec> = {
+  fox: spec("quad", 0.165, 1.12, "#FF9F45", "#FFF3E2", { accent: "#E07B2A", ear: "pointy", tail: "bushy", muzzle: "fox" }),
+  cat: spec("quad", 0.15, 1.12, "#A8B8C8", "#E8EEF4", { accent: "#FFB8C9", ear: "pointy", tail: "cat", muzzle: "cat" }),
+  dog: spec("quad", 0.17, 1.15, "#F2C078", "#FBE8C8", { accent: "#C98850", ear: "floppy", tail: "long", muzzle: "bear" }),
+  bear: spec("quad", 0.185, 1.1, "#A9744F", "#E8C9A8", { ear: "round", tail: "puff", muzzle: "bear" }),
+  panda: spec("quad", 0.18, 1.1, "#F7F4EC", "#FCFAF4", { dark: "#3B3B44", ear: "round", tail: "puff", muzzle: "bear", extras: ["mask"] }),
+  raccoon: spec("quad", 0.155, 1.2, "#9AA3AC", "#E5E9ED", { dark: "#4E5560", ear: "pointy", tail: "bushy", muzzle: "fox", extras: ["mask", "rings"] }),
+  hedgehog: spec("quad", 0.125, 1.25, "#C08552", "#F0DCBE", { dark: "#8A6642", ear: "pointy", tail: "puff", muzzle: "fox", extras: ["spikesBack"] }),
+  squirrel: spec("quad", 0.15, 1.2, "#C97B4A", "#F4E3D2", { accent: "#A85E34", ear: "tufts", tail: "bushy", muzzle: "fox" }),
+  pig: spec("quad", 0.16, 1.15, "#F5A8B8", "#FDE3E9", { accent: "#E98CA1", ear: "floppy", tail: "curl", muzzle: "snout" }),
+  koala: spec("quad", 0.155, 1.05, "#B5C4CE", "#E9EFF3", { accent: "#F7F1EA", ear: "round", muzzle: "flat" }),
+  deer: spec("quad", 0.215, 1.2, "#D9A06C", "#F7E7D2", { accent: "#A87A4F", ear: "long", tail: "puff", muzzle: "long", extras: ["antlers", "spots"] }),
+  unicorn: spec("quad", 0.215, 1.2, "#F3EAFB", "#FCF7FE", { accent: "#FF9FCE", ear: "long", tail: "mane", muzzle: "long", extras: ["horn", "mane"] }),
+  dragon: spec("quad", 0.19, 1.4, "#62C46A", "#D9F2DC", { accent: "#4CA95A", ear: "pointy", tail: "long", muzzle: "cat", extras: ["wings", "spikesBack"] }),
+  owl: spec("bird", 0.165, 0.65, "#A97FE0", "#EFE3FB", { accent: "#FFB84C", ear: "tufts", tail: "plume", muzzle: "beak" }),
+  duck: spec("bird", 0.13, 0.65, "#FFD24C", "#FFE9A0", { accent: "#FF9F45", tail: "flat", muzzle: "beak" }),
+  chick: spec("bird", 0.105, 0.6, "#FFD94C", "#FFE9A0", { accent: "#FF9F45", ear: "tuft", muzzle: "beak" }),
+  penguin: spec("bird", 0.155, 0.65, "#56789A", "#F4F8FB", { accent: "#FFB84C", muzzle: "beak" }),
+  bunny: spec("hop", 0.15, 0.78, "#D9CFC4", "#F7F1EA", { accent: "#FFB8C9", ear: "long", tail: "puff", muzzle: "flat" }),
+  frog: spec("hop", 0.095, 1.43, "#7CC46B", "#E2F4DC", { accent: "#FF8FB1", muzzle: "wide" }),
+  whale: spec("pond", 0.125, 2.8, "#5FA8D3", "#DCEFF9", { accent: "#4A8FB8", tail: "fluke", muzzle: "flat", extras: ["fin"] }),
+  seal: spec("pond", 0.115, 2.4, "#B8C9D9", "#E8EFF5", { accent: "#8FA8BD", tail: "fluke", muzzle: "flat", extras: ["paddles"] }),
+  turtle: spec("pond", 0.085, 2.2, "#8FBF6A", "#E5F0D5", { dark: "#5C9245", tail: "puff", muzzle: "flat", extras: ["shell"] }),
+  octopus: spec("pond", 0.13, 1.35, "#D98AC2", "#F7E4F0", { accent: "#C06BA6", muzzle: "flat", extras: ["suckers"] }),
+  crab: spec("pond", 0.075, 1.75, "#E86A5C", "#F9DAD5", { accent: "#C94F43", ear: "stalk", muzzle: "flat", extras: ["claws"] }),
+  cactus: spec("plant", 0.155, 0.55, "#5FA052", "#7FB86E", { accent: "#FF8FB1", extras: ["flower", "arms"] }),
+  bonsai: spec("plant", 0.2, 0.9, "#6FBF4E", "#8FCF6A", { accent: "#8A6642" }),
+  succulent: spec("plant", 0.115, 0.6, "#9BC98F", "#B5D9A8", { accent: "#E8A8C8" }),
+  sunflower: spec("plant", 0.205, 0.57, "#FFC800", "#8A5A32", { accent: "#5FA052" }),
+  clover: spec("plant", 0.115, 0.74, "#5FA052", "#7FC45C", { accent: "#F7F1EA" }),
+  sprout: spec("plant", 0.12, 0.53, "#7FC45C", "#9BD878", { accent: "#5FA052" }),
 };
 
-export { spriteAspect } from "./sprite_sizes";
-
-/** Путь к спрайту вида (sleep — поза сна). */
-export function spriteAsset(type: PetType, sleep = false): string {
-  const m = SPRITE_META[type];
-  const useSleep = sleep && m?.sleep;
-  return `/sprites/${type}${useSleep ? "_sleep" : ""}.webp`;
+export function cartoonSpec(type: PetType): CartoonSpec {
+  return (
+    CARTOON[type] ?? {
+      build: "quad", heightF: 0.16, aspect: 1.4,
+      body: "#9BC98F", belly: "#E5F0D5",
+      ear: "none", tail: "none", muzzle: "none", extras: [],
+    }
+  );
 }
 
 /** Стадии меняют только размер: малыш 55%, подросток 78%, взрослый 100%. */
-export function spriteStageScale(stage: number): number {
+export function cartoonStageScale(stage: number): number {
   return [0.55, 0.78, 1, 1][Math.max(0, Math.min(3, stage))];
 }
 
 /** Прыгуны: во время прогулки перескакивают, а не идут. */
 export const HOP_PETS: PetType[] = ["bunny", "frog"];
 
-/** Якоря аксессуаров и морды — в долях прямоугольника спрайта
- *  (спрайт смотрит вправо: x растёт к морде, y — вниз от верха). */
-export interface Anchors {
-  hat: [number, number];
-  neck: [number, number];
-  eye: [number, number];
-  mouth: [number, number];
-}
-
-const ANCHORS_QUAD: Anchors = { hat: [0.665, 0.085], neck: [0.585, 0.36], eye: [0.705, 0.215], mouth: [0.88, 0.33] };
-const ANCHORS_BIRD: Anchors = { hat: [0.51, 0.075], neck: [0.455, 0.42], eye: [0.575, 0.24], mouth: [0.76, 0.29] };
-const ANCHORS_HOP: Anchors = { hat: [0.66, 0.09], neck: [0.57, 0.4], eye: [0.71, 0.24], mouth: [0.86, 0.36] };
-const ANCHORS_POND: Anchors = { hat: [0.48, 0.09], neck: [0.42, 0.42], eye: [0.56, 0.26], mouth: [0.83, 0.52] };
-const ANCHORS_PLANT: Anchors = { hat: [0.5, 0.06], neck: [0.5, 0.34], eye: [0.56, 0.22], mouth: [0.5, 0.1] };
-
-export function anchorsFor(type: PetType): Anchors {
-  if (isPlant(type)) return ANCHORS_PLANT;
-  if (isAquatic(type)) return ANCHORS_POND;
-  if (HOP_PETS.includes(type)) return ANCHORS_HOP;
-  const birdLike: PetType[] = ["owl", "duck", "chick", "penguin"];
-  return birdLike.includes(type) ? ANCHORS_BIRD : ANCHORS_QUAD;
+/** Якорь рта (мини-игра): x от центра бокса вперёд, y от земли
+ *  (вверх = отрицательный), в долях высоты h. Зеркало cartoonMouthLocal. */
+export function cartoonMouthLocal(type: PetType, h: number): { x: number; y: number } {
+  const s = cartoonSpec(type);
+  switch (s.build) {
+    case "bird":
+      return { x: h * 0.18, y: -h * 0.66 };
+    case "hop":
+      return type === "frog"
+        ? { x: h * 0.45, y: -h * 0.43 }
+        : { x: h * 0.32, y: -h * 0.63 };
+    case "pond":
+      switch (type) {
+        case "whale": return { x: h * 1.0, y: -h * 0.5 };
+        case "seal": return { x: h * 1.05, y: -h * 0.48 };
+        case "turtle": return { x: h * 1.05, y: -h * 0.33 };
+        case "octopus": return { x: 0, y: -h * 0.54 };
+        default: return { x: 0, y: -h * 0.4 };
+      }
+    case "plant":
+      return { x: 0, y: -h * 0.85 };
+    default:
+      return { x: h * 0.5, y: -h * 0.66 };
+  }
 }
 
 /** Геометрия сцены (зеркало SceneGeom): доли ширины 400 / высоты 240. */

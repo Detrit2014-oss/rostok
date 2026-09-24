@@ -1,7 +1,7 @@
 name: time_to_grow
 description: "Росток — цифровая гигиена и ментальное здоровье: питомец растёт, пока телефон отдыхает."
 publish_to: 'none'
-version: 2.1.0+12
+version: 2.2.0+13
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -28,5 +28,3 @@ flutter:
   uses-material-design: true
 
   # Реалистичные спрайты питомцев (v2.1.0): 30 видов + позы сна.
-  assets:
-    - assets/sprites/

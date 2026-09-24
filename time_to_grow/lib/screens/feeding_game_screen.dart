@@ -1,25 +1,24 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
-import '../data/sprite_meta.dart';
+import '../data/cartoon.dart';
 import '../models/pet.dart';
 import '../services/pet_service.dart';
 import '../services/quest_service.dart';
+import '../widgets/cartoon_pet.dart';
 import '../widgets/common.dart';
-import '../widgets/sprite_cache.dart';
 
-/// Мини-игра «Покорми питомца» (v1.6.0, спрайты v2.1.0).
+/// Мини-игра «Покорми питомца» (v1.6.0, мультяшный зверь v2.2.0).
 ///
-/// Питомец стоит по центру — настоящий зверь с иллюстрации в едином
-/// стиле. Тапните по падающей еде — она прилетит прямо в рот (якорь
-/// морды спрайта), питомец довольно «пожуёт» (пружинка), хруст —
-/// плюс XP и монетки. Водные питомцы плавают в пруду, растения ловят
-/// еду бутоном. Вся еда нарисована цветной.
+/// Питомец стоит по центру — нарисованный кодом мультяшный зверь,
+/// который дышит, моргает и довольно жуёт. Тапните по падающей еде —
+/// она прилетит прямо в рот (якорь морды движка), питомец пружинит,
+/// хруст — плюс XP и монетки. Водные питомцы плавают в пруду,
+/// растения ловят еду макушкой. Вся еда нарисована цветной.
 class FeedingGameScreen extends StatefulWidget {
   const FeedingGameScreen({super.key});
 
@@ -71,22 +70,6 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
   void initState() {
     super.initState();
     _tick.repeat();
-    _ensureSprite();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _ensureSprite();
-  }
-
-  void _ensureSprite() {
-    final PetService petService = context.read<PetService>();
-    final Pet? pet = petService.activePet;
-    if (pet == null || pet.stage == 0) return;
-    SpriteCache.ensure(spriteAsset(pet.type), () {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
@@ -190,10 +173,9 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
     final Pet? pet = context.read<PetService>().activePet;
     final PetType type = pet?.type ?? PetType.fox;
     final int stage = pet?.stage ?? 3;
-    final ui.Image? img = SpriteCache.get(spriteAsset(type));
-    final double aspect = img == null ? 1.45 : img.width / img.height;
+    final double aspect = cartoonSpec(type).aspect;
     final double groundY = s.height * 0.82;
-    double boxH = s.height * 0.38 * spriteStageScale(stage);
+    double boxH = s.height * 0.38 * cartoonStageScale(stage);
     double boxW = boxH * aspect;
     if (boxW > s.width * 0.74) {
       boxW = s.width * 0.74;
@@ -205,12 +187,10 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
 
   Offset _mouthPosition(Size s) {
     final Pet? pet = context.read<PetService>().activePet;
-    final Anchors a = anchorsFor(pet?.type ?? PetType.fox);
+    final PetType type = pet?.type ?? PetType.fox;
     final Rect box = _creatureBox(s);
-    return Offset(
-      box.left + a.mouth.$1 * box.width,
-      box.top + a.mouth.$2 * box.height,
-    );
+    final Offset m = cartoonMouthLocal(type, box.height);
+    return Offset(box.center.dx + m.dx, box.bottom + m.dy);
   }
 
   Offset _foodPosition(_Food f, Size s) {
@@ -260,9 +240,6 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
                 child: LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints c) {
                     final Size cs = c.biggest;
-                    final ui.Image? img = pet != null && pet.stage > 0
-                        ? SpriteCache.get(spriteAsset(pet.type))
-                        : null;
                     return GestureDetector(
                       onTapDown: (TapDownDetails d) =>
                           _tapFood(d.localPosition, cs),
@@ -270,7 +247,6 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
                         size: cs,
                         painter: _GamePainter(
                           pet: pet,
-                          creature: img,
                           creatureBox:
                               pet != null && pet.stage > 0
                                   ? _creatureBox(cs)
@@ -394,7 +370,6 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
 class _GamePainter extends CustomPainter {
   _GamePainter({
     required this.pet,
-    required this.creature,
     required this.creatureBox,
     required this.foods,
     required this.phaseValue,
@@ -404,7 +379,6 @@ class _GamePainter extends CustomPainter {
   });
 
   final Pet? pet;
-  final ui.Image? creature;
   final Rect? creatureBox;
   final List<_Food> foods;
   final double phaseValue;
@@ -415,7 +389,7 @@ class _GamePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     _paintBackdrop(canvas, size);
-    if (pet != null && creature != null && creatureBox != null) {
+    if (pet != null && creatureBox != null) {
       if (aquatic) _paintPond(canvas, size);
       _paintCreature(canvas, size);
       if (aquatic) _paintWaterFront(canvas, size);
@@ -460,7 +434,7 @@ class _GamePainter extends CustomPainter {
     );
   }
 
-  /// Спрайт питомца: дышит (лёгкая качка), при поедании пружинит.
+  /// Мультяшный питомец: дышит, моргает; при поедании пружинит и жуёт.
   void _paintCreature(Canvas canvas, Size size) {
     final Rect box = creatureBox!;
     final double bob = math.sin(phaseValue * 2 * math.pi) * 2.5;
@@ -472,24 +446,22 @@ class _GamePainter extends CustomPainter {
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(box.center.dx, box.bottom + 3),
-        width: box.width * 0.6 * chew,
+        width: box.width * 0.55 * chew,
         height: box.width * 0.09,
       ),
       Paint()..color = const Color(0xFF2E7D32).withOpacity(0.18),
     );
 
     canvas.save();
-    final Offset pivot = Offset(box.center.dx, box.bottom);
-    canvas.translate(pivot.dx, pivot.dy + bob);
+    canvas.translate(box.center.dx, box.bottom + bob);
     canvas.scale(chew, chew);
-    final Rect dst = Rect.fromLTWH(-box.width / 2, -box.height,
-        box.width, box.height);
-    canvas.drawImageRect(
-      creature!,
-      Rect.fromLTWH(0, 0, creature!.width.toDouble(),
-          creature!.height.toDouble()),
-      dst,
-      Paint()..filterQuality = FilterQuality.medium,
+    paintCartoonPet(
+      canvas,
+      pet!,
+      box.height,
+      tSec: elapsed.inMilliseconds / 1000.0,
+      kind: 'idle',
+      chewing: chewing,
     );
     canvas.restore();
   }
@@ -580,12 +552,9 @@ class _GamePainter extends CustomPainter {
   }
 
   Offset _mouthPos(Size s) {
-    final Anchors a = anchorsFor(pet?.type ?? PetType.fox);
     final Rect box = creatureBox ?? Rect.zero;
-    return Offset(
-      box.left + a.mouth.$1 * box.width,
-      box.top + a.mouth.$2 * box.height,
-    );
+    final Offset m = cartoonMouthLocal(pet?.type ?? PetType.fox, box.height);
+    return Offset(box.center.dx + m.dx, box.bottom + m.dy);
   }
 
   Offset _foodPos(_Food f) {
