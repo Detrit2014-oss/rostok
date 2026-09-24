@@ -67,7 +67,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
     const loop = () => {
       const now = performance.now();
       const el = now - startRef.current;
-      // Спавн
+      // Спавн еды (foodsRef — единый источник, setFoods — для рендера)
       const last = foodsRef.current.length
         ? foodsRef.current[foodsRef.current.length - 1].spawnMs
         : -SPAWN_EVERY_MS;
@@ -83,6 +83,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
           },
         ];
       }
+      setFoods([...foodsRef.current]);
       // Таймер
       setLeft(Math.max(0, ROUND_SECONDS - Math.floor(el / 1000)));
       if (el >= ROUND_SECONDS * 1000) {
@@ -114,10 +115,14 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
 
   const catchFood = (f: Food) => {
     if (f.flying) return;
-    setFoods((prev) => prev.map((x) => (x.id === f.id ? { ...x, flying: true } : x)));
+    foodsRef.current = foodsRef.current.map((x) =>
+      x.id === f.id ? { ...x, flying: true } : x
+    );
+    setFoods([...foodsRef.current]);
     setMouthOpen(1);
     setTimeout(() => {
-      setFoods((prev) => prev.filter((x) => x.id !== f.id));
+      foodsRef.current = foodsRef.current.filter((x) => x.id !== f.id);
+      setFoods([...foodsRef.current]);
       scoreRef.current += 1;
       setScore(scoreRef.current);
     }, 200);

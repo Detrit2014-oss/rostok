@@ -212,8 +212,8 @@ export const PET_CATALOG: {
   { name: "Росточек", type: "sprout", emoji: "🌱", desc: "Самый первый друг — символ «Ростка»", accusative: "Росточек" },
 ];
 
-export const K_APP_VERSION = "1.2.0";
-export const K_APP_BUILD_NUMBER = 3;
+export const K_APP_VERSION = "1.8.0";
+export const K_APP_BUILD_NUMBER = 9;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
 export const K_UPDATE_CHECK_INTERVAL_HOURS = 6;
