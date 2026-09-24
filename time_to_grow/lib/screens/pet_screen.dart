@@ -93,7 +93,7 @@ class _PetScreenState extends State<PetScreen> {
                         'Сегодня: ${pet.todayMinutes} мин'),
                     _chip(context, Icons.local_fire_department_rounded,
                         'Серия: ${pet.streakDays}'),
-                    _chip(context, Icons.paid_rounded, '🪙 ${pet.coins}'),
+                    _coinChip(pet.coins),
                     if (pet.freezes > 0)
                       _chip(context, Icons.ac_unit_rounded, '🧊 ×${pet.freezes}'),
                   ],
@@ -166,6 +166,10 @@ class _PetScreenState extends State<PetScreen> {
                           ),
                         ),
                       const SizedBox(height: 12),
+                      if (active != null) ...<Widget>[
+                        _ageCard(context, pet, active),
+                        const SizedBox(height: 12),
+                      ],
                       if (session.isRunning)
                         _runningCard(context, session)
                       else
@@ -264,7 +268,7 @@ class _PetScreenState extends State<PetScreen> {
                       ),
                       Text(
                         quests.isClaimed(q)
-                            ? 'Награда получена: +${q.rewardCoins} 🪙 +${q.rewardXp} XP'
+                            ? 'Награда получена: +${q.rewardCoins} монеток +${q.rewardXp} XP'
                             : '${q.hint} · ${quests.progress[q.id] ?? 0}/${q.target}',
                         style: const TextStyle(
                             fontSize: 11.5, color: Palette.inkSoft),
@@ -349,6 +353,132 @@ class _PetScreenState extends State<PetScreen> {
         ],
       ),
     );
+  }
+
+  /// Чип с рисованой монеткой (v1.9.0) — вместо эмодзи 🪙.
+  Widget _coinChip(int amount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const CoinIcon(size: 15),
+          const SizedBox(width: 6),
+          Text(
+            '$amount',
+            style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: Palette.ink),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Карточка возраста (v1.9.0): возраст в днях и подарки за вехи.
+  Widget _ageCard(BuildContext context, PetService petService, Pet active) {
+    final int days = active.ageDays();
+    final List<int> pending = active.pendingAgeBonuses();
+    int? nextMilestone;
+    for (final int d in Pet.ageBonuses.keys) {
+      if (d > days && (nextMilestone == null || d < nextMilestone)) {
+        nextMilestone = d;
+      }
+    }
+    return InfoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Text('🎂', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Возраст: $days ${_daysWord(days)}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14.5),
+                    ),
+                    Text(
+                      nextMilestone == null
+                          ? 'Все вехи возраста пройдены — легенда лужайки!'
+                          : 'Следующая веха: $nextMilestone дн. — подарок ${Pet.ageBonuses[nextMilestone]} монеток',
+                      style: const TextStyle(
+                          fontSize: 11.5, color: Palette.inkSoft),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (pending.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            for (final int day in pending)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: <Widget>[
+                    const Icon(Icons.redeem_rounded,
+                        size: 18, color: Palette.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Подарок за $day ${_daysWord(day)}: '
+                        '+${Pet.ageBonuses[day]} монеток и XP',
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: Palette.ink),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        final int reward =
+                            petService.claimAgeBonus(active, day);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              reward > 0
+                                  ? 'Питомец с нами $day ${_daysWord(day)} — подарок +$reward монеток!'
+                                  : 'Подарок уже забран',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.card_giftcard_rounded, size: 16),
+                      label: const Text('Забрать',
+                          style: TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _daysWord(int n) {
+    if (n % 100 >= 11 && n % 100 <= 14) return 'дней';
+    switch (n % 10) {
+      case 1:
+        return 'день';
+      case 2:
+      case 3:
+      case 4:
+        return 'дня';
+      default:
+        return 'дней';
+    }
   }
 
   Widget _chip(BuildContext context, IconData icon, String text) {
@@ -570,7 +700,7 @@ class _PetScreenState extends State<PetScreen> {
               ),
             ),
             child: Text(
-              '${_stageEmoji(p.stage)} ${p.name} · ${p.stageName}',
+              '${_stageEmojiFor(p)} ${p.name} · ${p.stageName}',
               style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
@@ -579,6 +709,11 @@ class _PetScreenState extends State<PetScreen> {
           ),
       ],
     );
+  }
+
+  String _stageEmojiFor(Pet p) {
+    if (p.stage == 0) return p.fromSeed ? '🌰' : '🥚';
+    return _stageEmoji(p.stage);
   }
 
   String _stageEmoji(int stage) {
@@ -623,7 +758,7 @@ class _PetScreenState extends State<PetScreen> {
         title: const Text('Ура! 🎉'),
         content: Text(
           '«$name» вырос во взрослого питомца! На следующей прогулке '
-          'появится новое яйцо — коллекция продолжается.',
+          'появится новый питомец — коллекция продолжается.',
         ),
         actions: <Widget>[
           TextButton(

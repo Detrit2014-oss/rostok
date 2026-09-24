@@ -207,10 +207,17 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: Center(
-              child: Text(
-                '🪙 ${petService.coins}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, color: Palette.ink),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const CoinIcon(size: 16),
+                  const SizedBox(width: 5),
+                  Text(
+                    '${petService.coins}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, color: Palette.ink),
+                  ),
+                ],
               ),
             ),
           ),
@@ -317,7 +324,7 @@ class _FeedingGameScreenState extends State<FeedingGameScreen>
                   fontWeight: FontWeight.w800, fontSize: 16),
             ),
             Text(
-              'Награда: +${_score * 2} XP · +$_score 🪙 (рекорд: $_best)',
+              'Награда: +${_score * 2} XP · +$_score монеток (рекорд: $_best)',
               style: const TextStyle(fontSize: 12.5, color: Palette.inkSoft),
             ),
             const SizedBox(height: 10),

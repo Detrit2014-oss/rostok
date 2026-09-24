@@ -23,9 +23,11 @@ import {
   PET_CATALOG,
   Pet,
   petStage,
+  isPlant,
 } from "./types";
 import type { PetType } from "./types";
 import { dailyQuests, QUEST_POOL, XP_PER_TUCK_IN } from "./quests";
+import { AGE_BONUSES, ageDays } from "./types";
 import { moodAnalyze } from "./moodai";
 import { compareVersions, dayKey, mondayMs, nextVersion, seededRandom, stringHash } from "./format";
 
@@ -53,6 +55,8 @@ interface TTGState {
   coins: number;
   /** Заморозки серии 🧊 (v1.7.0), максимум 2. */
   freezes: number;
+  /** Купленные предметы гардероба (v1.9.0). Общий шкаф игрока. */
+  wardrobe: string[];
 
   // ── Задания / сон / погода (v1.7.0) ──
   questDay: string;
@@ -113,6 +117,12 @@ interface TTGState {
   addCoins: (amount: number) => void;
   /** Купить рамку активному питомцу; false — не хватило монет. */
   buyFrame: (frameId: string, price: number) => boolean;
+  /** Купить предмет гардероба (v1.9.0); false — не хватило монет. */
+  buyWardrobeItem: (itemId: string, price: number) => boolean;
+  /** Надеть/снять предмет на активного питомца. Слот: hat|neck|face|skin. */
+  equipItem: (slot: string, itemId: string) => void;
+  /** Забрать возрастной подарок питомца (v1.9.0); 0 — недоступен. */
+  claimAgeBonus: (petId: string, day: number) => number;
   /** Купить заморозку серии 🧊; false — лимит/не хватает монет. */
   buyFreeze: () => boolean;
   /** Прогресс ежедневных заданий (v1.7.0). */
@@ -147,6 +157,12 @@ function makeEgg(index: number): Pet {
     growthMinutes: 0,
     xp: 0,
     frame: "none",
+    fromSeed: isPlant(species.type),
+    hat: "none",
+    neck: "none",
+    face: "none",
+    skin: "classic",
+    claimedAges: [],
   };
 }
 
@@ -193,6 +209,7 @@ export const useTTG = create<TTGState>()(
       weekMinutes: 0,
       coins: 0,
       freezes: 0,
+      wardrobe: [],
 
       questDay: "",
       questProgress: {},
@@ -276,7 +293,8 @@ export const useTTG = create<TTGState>()(
         set({ countedSec: s.countedSec + addSec, awaySinceMs: null, nowMs: Date.now() });
       },
 
-      /** Большой экран выбора: создаём питомца выбранного вида. */
+      /** Большой экран выбора: создаём питомца выбранного вида.
+       *  Растения (v1.9.0) сажаются семечком — fromSeed. */
       choosePet: (type) => {
         const s = get();
         const species = PET_CATALOG.find((x) => x.type === type) ?? PET_CATALOG[0];
@@ -288,6 +306,12 @@ export const useTTG = create<TTGState>()(
           growthMinutes: 0,
           xp: 0,
           frame: "none",
+          fromSeed: isPlant(type),
+          hat: "none",
+          neck: "none",
+          face: "none",
+          skin: "classic",
+          claimedAges: [],
         };
         set({ pets: [...s.pets, pet], needsPetChoice: false });
       },
@@ -423,6 +447,55 @@ export const useTTG = create<TTGState>()(
         if (s.coins < 200) return false;
         set({ coins: s.coins - 200, freezes: s.freezes + 1 });
         return true;
+      },
+
+      // ── Гардероб (v1.9.0) ──────────────────────────────────────
+      buyWardrobeItem: (itemId, price) => {
+        const s = get();
+        if (s.wardrobe.includes(itemId)) return true;
+        if ((s.coins ?? 0) < price) return false;
+        set({ coins: s.coins - price, wardrobe: [...s.wardrobe, itemId] });
+        return true;
+      },
+
+      equipItem: (slot, itemId) => {
+        const s = get();
+        const idx = s.pets.findIndex((p) => petStage(p) < 3);
+        if (idx === -1) return;
+        set({
+          pets: s.pets.map((p, i) => {
+            if (i !== idx) return p;
+            if (slot === "skin") {
+              return { ...p, skin: p.skin === itemId ? "classic" : itemId };
+            }
+            const key = slot as "hat" | "neck" | "face";
+            const cur = p[key] ?? "none";
+            return { ...p, [key]: cur === itemId ? "none" : itemId };
+          }),
+        });
+      },
+
+      claimAgeBonus: (petId, day) => {
+        const s = get();
+        const pet = s.pets.find((p) => p.id === petId);
+        if (!pet) return 0;
+        const reward = AGE_BONUSES[day];
+        if (!reward) return 0;
+        if ((pet.claimedAges ?? []).includes(day)) return 0;
+        if (ageDays(pet) < day) return 0;
+        set({
+          coins: s.coins + reward,
+          pets: s.pets.map((p) =>
+            p.id === petId
+              ? {
+                  ...p,
+                  claimedAges: [...(p.claimedAges ?? []), day],
+                  xp: (p.xp ?? 0) + reward,
+                }
+              : p
+          ),
+        });
+        return reward;
       },
 
       // ── Задания дня (v1.7.0) ──────────────────────────────────────
@@ -630,6 +703,7 @@ export const useTTG = create<TTGState>()(
           weekMinutes: 0,
           coins: 0,
           freezes: 0,
+          wardrobe: [],
           questDay: "",
           questProgress: {},
           questClaimed: [],
@@ -649,7 +723,7 @@ export const useTTG = create<TTGState>()(
     }),
     {
       name: "ttg-web-state-v1",
-      version: 3,
+      version: 4,
       partialize: (s) => ({
         pets: s.pets,
         totalMinutes: s.totalMinutes,
@@ -658,6 +732,7 @@ export const useTTG = create<TTGState>()(
         weekMinutes: s.weekMinutes,
         coins: s.coins,
         freezes: s.freezes,
+        wardrobe: s.wardrobe,
         questDay: s.questDay,
         questProgress: s.questProgress,
         questClaimed: s.questClaimed,
@@ -706,6 +781,23 @@ export const useTTG = create<TTGState>()(
           s.tuckInDay = s.tuckInDay ?? "";
           s.weatherMode = s.weatherMode ?? "auto";
           s.weatherCondition = s.weatherCondition ?? "clear";
+        }
+        if (version < 4) {
+          // v4 (v1.9.0): рост замедлен в 20 раз — умножаем накопленные
+          // минуты, чтобы выросшие питомцы не «помолодели». Гардероб.
+          s.pets = (s.pets ?? []).map((p) => ({
+            ...p,
+            growthMinutes: (p.growthMinutes ?? 0) > 0
+              ? Math.round(p.growthMinutes * 20)
+              : 0,
+            fromSeed: p.fromSeed ?? false,
+            hat: p.hat ?? "none",
+            neck: p.neck ?? "none",
+            face: p.face ?? "none",
+            skin: p.skin ?? "classic",
+            claimedAges: p.claimedAges ?? [],
+          }));
+          s.wardrobe = s.wardrobe ?? [];
         }
         return s as TTGState;
       },

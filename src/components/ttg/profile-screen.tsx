@@ -261,7 +261,7 @@ export function ProfileScreen() {
         <StatTile
           icon={Coins}
           value={`${coins}`}
-          label="монеток 🪙"
+          label="монеток"
           color={C.yellowDark}
         />
         <StatTile
@@ -408,7 +408,7 @@ export function ProfileScreen() {
           десять, а яйцо выросло и трескается перед вылуплением. Это
           веб-демонстратор Flutter-приложения v1.2.0: вся логика перенесена 1:1.{" "}
           <a
-            href="/time_to_grow_v1.2.0.zip"
+            href="/rostok_v1.9.0.zip"
             download
             className="font-bold underline"
             style={{ color: C.blue }}

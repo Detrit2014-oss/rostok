@@ -101,9 +101,21 @@ export interface Pet {
   xp: number;
   /** Декоративная рамка из магазина: none|gold|neon|flower. */
   frame: string;
+  /** Растения (v1.9.0) выращены из семечка — без стадии «Яйцо». */
+  fromSeed?: boolean;
+  /** Гардероб (v1.9.0): hat: none|cap|beanie|crown; neck: none|scarf|bow;
+   *  face: none|glasses|shades; skin: classic|golden|mint|rose. */
+  hat?: string;
+  neck?: string;
+  face?: string;
+  skin?: string;
+  /** Уже забранные возрастные подарки (дни). */
+  claimedAges?: number[];
 }
 
-export const STAGE_THRESHOLDS = [0, 5, 15, 30] as const;
+/** Пороги стадий в минутах (v1.9.0): рост замедлен в 20 раз.
+ *  Яйцо/семечко → 100 мин → малыш → 300 → подросток → 600 → взрослый. */
+export const STAGE_THRESHOLDS = [0, 100, 300, 600] as const;
 
 export function petStage(p: Pet): number {
   if (p.growthMinutes >= STAGE_THRESHOLDS[3]) return 3;
@@ -113,6 +125,39 @@ export function petStage(p: Pet): number {
 }
 
 export const STAGE_NAMES = ["Яйцо", "Малыш", "Подросток", "Взрослый"];
+
+/** У растений первая стадия — «Семечко», а не «Яйцо» (v1.9.0). */
+export function stageName(p: Pet): string {
+  const stage = petStage(p);
+  if (stage === 0 && isPlant(p.type)) return "Семечко";
+  return STAGE_NAMES[stage];
+}
+
+/** Полных дней питомца (v1.9.0). */
+export function ageDays(p: Pet, nowMs?: number): number {
+  const now = nowMs ?? Date.now();
+  return Math.max(0, Math.floor((now - p.bornAt) / 86400000));
+}
+
+/** Возрастные вехи: день → подарок (монет + столько же XP). */
+export const AGE_BONUSES: Record<number, number> = {
+  1: 30,
+  3: 60,
+  7: 120,
+  14: 250,
+  30: 500,
+  60: 900,
+  100: 1500,
+};
+
+/** Вехи, которые уже можно забрать, но ещё не забрали. */
+export function pendingAgeBonuses(p: Pet, nowMs?: number): number[] {
+  const days = ageDays(p, nowMs);
+  return Object.keys(AGE_BONUSES)
+    .map(Number)
+    .filter((d) => d <= days && !(p.claimedAges ?? []).includes(d))
+    .sort((a, b) => a - b);
+}
 
 export function stageProgress(p: Pet): number {
   const stage = petStage(p);
@@ -212,8 +257,8 @@ export const PET_CATALOG: {
   { name: "Росточек", type: "sprout", emoji: "🌱", desc: "Самый первый друг — символ «Ростка»", accusative: "Росточек" },
 ];
 
-export const K_APP_VERSION = "1.8.0";
-export const K_APP_BUILD_NUMBER = 9;
+export const K_APP_VERSION = "2.0.0";
+export const K_APP_BUILD_NUMBER = 10;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
 export const K_UPDATE_CHECK_INTERVAL_HOURS = 6;
@@ -269,7 +314,8 @@ export function bellyColor(type: PetType): string {
   return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
 }
 
-/** Таблица внешности видов (зеркало lib/data/species_style.dart). */
+/** Таблица внешности видов (зеркало lib/data/species_style.dart).
+ *  v1.9.0: телосложение build (quad|bird|hop|pond|plant), шея, голова. */
 export interface SpeciesStyle {
   body: string;
   belly?: string;
@@ -292,45 +338,135 @@ export interface SpeciesStyle {
     | "wings"
     | "mask"
     | "mane"
+    | "antler"
     | "spots"
     | "claws"
     | "tentacles";
   whiteBelly?: boolean;
+  build?: "quad" | "bird" | "hop" | "pond" | "plant";
+  neck?: number;
+  headScale?: number;
+  bodyLen?: number;
+  legLen?: number;
 }
 
 const SPECIES_STYLES: Record<PetType, SpeciesStyle> = {
+  // ── Четвероногие ходоки ──
   fox: { body: "#FF9F45", ear: "triangle", tail: "bushy", extra: "spots" },
-  cat: { body: "#A8B8C8", ear: "triangle", tail: "thin" },
-  owl: { body: "#A97FE0", belly: "#EFE3FB", ear: "tuft", muzzle: "beak" },
-  dragon: { body: "#62C46A", belly: "#D9F2DC", ear: "horns", extra: "wings" },
-  duck: { body: "#FFD24C", ear: "tuft", muzzle: "duckBeak" },
-  bunny: { body: "#D9CFC4", belly: "#F7F1EA", ear: "long", muzzle: "buckteeth" },
-  penguin: { body: "#56789A", muzzle: "beak", whiteBelly: true },
-  hedgehog: { body: "#C08552", belly: "#F0DCBE", ear: "round", extra: "spikes" },
-  panda: { body: "#F2EEE4", ear: "pom", extra: "patches", whiteBelly: true },
-  bear: { body: "#A9744F", ear: "round", muzzle: "bearMuzzle" },
+  cat: { body: "#A8B8C8", ear: "triangle", tail: "thin", bodyLen: 0.92 },
+  dragon: { body: "#62C46A", belly: "#D9F2DC", ear: "horns", extra: "wings", neck: 0.42 },
+  bunny: { body: "#D9CFC4", belly: "#F7F1EA", ear: "long", muzzle: "buckteeth", build: "hop", bodyLen: 0.88 },
+  hedgehog: { body: "#C08552", belly: "#F0DCBE", ear: "round", extra: "spikes", bodyLen: 0.94 },
+  panda: { body: "#F2EEE4", ear: "pom", extra: "patches", whiteBelly: true, bodyLen: 1.12, legLen: 0.86 },
+  bear: { body: "#A9744F", ear: "round", muzzle: "bearMuzzle", bodyLen: 1.14, legLen: 0.9 },
   dog: { body: "#F2C078", belly: "#FBE8C8", ear: "triangle", tail: "bushy", muzzle: "bearMuzzle" },
-  deer: { body: "#D9A06C", belly: "#F7E7D2", ear: "round", muzzle: "smile" },
-  seal: { body: "#B8C9D9", belly: "#E8EFF5", muzzle: "smile" },
-  whale: { body: "#5FA8D3", belly: "#DCEFF9", muzzle: "whaleMouth" },
-  turtle: { body: "#8FBF6A", belly: "#E5F0D5", extra: "shell" },
-  frog: { body: "#7CC46B", belly: "#E2F4DC", muzzle: "topEyes" },
-  squirrel: { body: "#C97B4A", belly: "#F4E3D2", ear: "tuft", tail: "bushy" },
+  deer: { body: "#D9A06C", belly: "#F7E7D2", ear: "round", extra: "antler", muzzle: "smile", neck: 0.72, legLen: 1.18 },
+  squirrel: { body: "#C97B4A", belly: "#F4E3D2", ear: "tuft", tail: "bushy", bodyLen: 0.9 },
   raccoon: { body: "#9AA3AC", belly: "#E5E9ED", ear: "triangle", extra: "mask" },
-  koala: { body: "#B5C4CE", belly: "#E9EFF3", ear: "pom", muzzle: "bearMuzzle" },
-  pig: { body: "#F5A8B8", belly: "#FDE3E9", ear: "triangle", tail: "curl", muzzle: "snout" },
-  chick: { body: "#FFD94C", ear: "tuft", muzzle: "beak" },
-  unicorn: { body: "#F3EAFB", ear: "triangle", extra: "mane", whiteBelly: true },
-  octopus: { body: "#D98AC2", belly: "#F7E4F0", extra: "tentacles" },
-  crab: { body: "#E86A5C", belly: "#F9DAD5", extra: "claws" },
-  cactus: { body: "#5FA052" },
-  bonsai: { body: "#6FBF4E", belly: "#CB7B4E" },
-  succulent: { body: "#9BC98F", belly: "#CB7B4E" },
-  sunflower: { body: "#FFC800", belly: "#CB7B4E" },
-  clover: { body: "#5FA052", belly: "#CB7B4E" },
-  sprout: { body: "#7FC45C", belly: "#CB7B4E" },
+  koala: { body: "#B5C4CE", belly: "#E9EFF3", ear: "pom", muzzle: "bearMuzzle", legLen: 0.8 },
+  pig: { body: "#F5A8B8", belly: "#FDE3E9", ear: "triangle", tail: "curl", muzzle: "snout", bodyLen: 1.16, legLen: 0.78 },
+  unicorn: { body: "#F3EAFB", ear: "triangle", extra: "mane", whiteBelly: true, neck: 0.72, legLen: 1.15 },
+  // ── Птицы (две лапы) ──
+  owl: { body: "#A97FE0", belly: "#EFE3FB", ear: "tuft", muzzle: "beak", build: "bird", headScale: 1.25 },
+  duck: { body: "#FFD24C", ear: "tuft", muzzle: "duckBeak", build: "bird" },
+  chick: { body: "#FFD94C", ear: "tuft", muzzle: "beak", build: "bird", headScale: 1.3 },
+  penguin: { body: "#56789A", muzzle: "beak", whiteBelly: true, build: "bird", bodyLen: 0.82 },
+  // ── Прыгуны ──
+  frog: { body: "#7CC46B", belly: "#E2F4DC", muzzle: "topEyes", build: "hop" },
+  // ── Водные жители пруда ──
+  seal: { body: "#B8C9D9", belly: "#E8EFF5", muzzle: "smile", build: "pond" },
+  whale: { body: "#5FA8D3", belly: "#DCEFF9", muzzle: "whaleMouth", build: "pond" },
+  turtle: { body: "#8FBF6A", belly: "#E5F0D5", extra: "shell", build: "pond" },
+  octopus: { body: "#D98AC2", belly: "#F7E4F0", extra: "tentacles", build: "pond" },
+  crab: { body: "#E86A5C", belly: "#F9DAD5", extra: "claws", build: "pond" },
+  // ── Растения в горшочках ──
+  cactus: { body: "#5FA052", build: "plant" },
+  bonsai: { body: "#6FBF4E", belly: "#CB7B4E", build: "plant" },
+  succulent: { body: "#9BC98F", belly: "#CB7B4E", build: "plant" },
+  sunflower: { body: "#FFC800", belly: "#CB7B4E", build: "plant" },
+  clover: { body: "#5FA052", belly: "#CB7B4E", build: "plant" },
+  sprout: { body: "#7FC45C", belly: "#CB7B4E", build: "plant" },
 };
 
 export function speciesStyle(type: PetType): SpeciesStyle {
   return SPECIES_STYLES[type] ?? SPECIES_STYLES.fox;
+}
+
+// ── Гардероб (v1.9.0) ───────────────────────────────────────────────
+
+export interface WardrobeItem {
+  id: string;
+  slot: "hat" | "neck" | "face" | "skin";
+  title: string;
+  emoji: string;
+  price: number;
+  subtitle: string;
+}
+
+export const WARDROBE_CATALOG: WardrobeItem[] = [
+  { id: "cap", slot: "hat", title: "Кепка", emoji: "🧢", price: 80, subtitle: "Спортивный стиль" },
+  { id: "beanie", slot: "hat", title: "Шапочка", emoji: "🧶", price: 120, subtitle: "Тепло в холода" },
+  { id: "crown", slot: "hat", title: "Корона", emoji: "👑", price: 400, subtitle: "Для особенных питомцев" },
+  { id: "scarf", slot: "neck", title: "Шарф", emoji: "🧣", price: 100, subtitle: "В полосочку, тёплый" },
+  { id: "bow", slot: "neck", title: "Бантик", emoji: "🎀", price: 90, subtitle: "Мило и нарядно" },
+  { id: "glasses", slot: "face", title: "Очки", emoji: "👓", price: 150, subtitle: "Умный взгляд" },
+  { id: "shades", slot: "face", title: "Тёмные очки", emoji: "🕶️", price: 200, subtitle: "Звезда лужайки" },
+  { id: "golden", slot: "skin", title: "Золотой окрас", emoji: "🌟", price: 500, subtitle: "Сияет как монетка" },
+  { id: "mint", slot: "skin", title: "Мятный окрас", emoji: "🌿", price: 300, subtitle: "Свежесть после дождя" },
+  { id: "rose", slot: "skin", title: "Розовый окрас", emoji: "🌸", price: 300, subtitle: "Нежность и доброта" },
+];
+
+export const SLOT_TITLES: Record<string, string> = {
+  hat: "Головные уборы",
+  neck: "Шея",
+  face: "Лицо",
+  skin: "Окрасы",
+};
+
+/** hex → rgb-компоненты. */
+function hexParts(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+function toHex(n: number): string {
+  return Math.round(Math.min(255, Math.max(0, n))).toString(16).padStart(2, "0");
+}
+
+/** Смесь двух цветов: a поверх b с альфой alpha (0..1). */
+export function mixColors(base: string, overlay: string, alpha: number): string {
+  const [r1, g1, b1] = hexParts(base);
+  const [r2, g2, b2] = hexParts(overlay);
+  const m = (c1: number, c2: number) => Math.round(c1 * (1 - alpha) + c2 * alpha);
+  return `#${toHex(m(r1, r2))}${toHex(m(g1, g2))}${toHex(m(b1, b2))}`;
+}
+
+/** Окрас-скин (v1.9.0): подкрашиваем основной цвет тела. */
+export function skinnedBodyColor(type: PetType, skin?: string): string {
+  const base = speciesStyle(type).body;
+  switch (skin) {
+    case "golden":
+      return mixColors(base, "#FFC800", 0.55);
+    case "mint":
+      return mixColors(base, "#62D9B8", 0.55);
+    case "rose":
+      return mixColors(base, "#FF8FB1", 0.55);
+    default:
+      return base;
+  }
+}
+
+/** Животик с учётом окраса. */
+export function skinnedBellyColor(type: PetType, skin?: string): string {
+  if (!skin || skin === "classic") return bellyColor(type);
+  return mixColors(skinnedBodyColor(type, skin), "#FFFFFF", 0.65);
+}
+
+/** Затемнённая версия окраса (дальние лапы, тени). */
+export function skinnedShadeColor(type: PetType, skin?: string): string {
+  return mixColors(skinnedBodyColor(type, skin), "#000000", 0.18);
 }

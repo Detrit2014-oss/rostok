@@ -2,7 +2,7 @@
 
 // Порт lib/screens/feeding_game_screen.dart (v1.6.0): питомец СИДИТ
 // на задних лапах и ЛОВИТ ЕДУ РТОМ; кит — лицом к экрану. Вся еда
-// цветная (без прозрачных квадратов). Награда: 2 XP и 1 🪙 за еду.
+// цветная (без прозрачных квадратов). Награда: 2 XP и 1 монетка за еду.
 
 import { useEffect, useRef, useState } from "react";
 import { useTTG } from "@/lib/ttg/store";
@@ -14,7 +14,7 @@ import {
 } from "@/lib/ttg/types";
 import type { Pet, PetType } from "@/lib/ttg/types";
 import { bellyColor, bodyColor } from "@/lib/ttg/types";
-import { BigButton } from "./widgets";
+import { BigButton, Coin } from "./widgets";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -157,7 +157,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
           🍽️ Покорми питомца
         </span>
         <span className="text-[13px] font-bold" style={{ color: C.ink }}>
-          🪙 {coins}
+          <Coin size={16} /> {coins}
         </span>
         <button
           type="button"
@@ -234,7 +234,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
               Хрум-хрум! 🎉 Поймано еды: {score}
             </p>
             <p className="text-center text-[12.5px]" style={{ color: C.inkSoft }}>
-              Награда: +{score * 2} XP · +{score} 🪙 (рекорд: {Math.max(best, score)})
+              Награда: +{score * 2} XP · +{score} монеток (рекорд: {Math.max(best, score)})
             </p>
             <div className="flex gap-2">
               <BigButton label="Ещё раз" fullWidth onClick={start} />

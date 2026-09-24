@@ -5,37 +5,104 @@
 
 import { useTTG, activePet, countedSecondsSoFar } from "@/lib/ttg/store";
 import {
+  AGE_BONUSES,
   C,
-  STAGE_NAMES,
+  ageDays,
+  isPlant,
   minutesToNextStage,
+  pendingAgeBonuses,
   petLevelFromXp,
   petLevelProgress,
   petStage,
+  stageName,
   stageProgress,
 } from "@/lib/ttg/types";
+import type { Pet } from "@/lib/ttg/types";
 import { dailyQuests, seasonOf, XP_PER_TUCK_IN } from "@/lib/ttg/quests";
 import { useWeather } from "@/lib/ttg/use-weather";
 import { formatTimer } from "@/lib/ttg/format";
 import { PetScene } from "./scene";
-import { BigButton, Chip, InfoCard, ProgressBar } from "./widgets";
+import { BigButton, Chip, CoinChip, InfoCard, ProgressBar } from "./widgets";
 import { ShopScreen } from "./shop-screen";
 import { FeedingGame } from "./feeding-game";
-import { CheckCircle2, Clock, Coins, Flame, Pencil, PhoneOff, Utensils, Snowflake, Store } from "lucide-react";
+import { CheckCircle2, Clock, Flame, Gift, Pencil, PhoneOff, Utensils, Snowflake, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
 
-function stageEmoji(stage: number): string {
+function stageEmoji(stage: number, plant: boolean): string {
+  if (stage === 0) return plant ? "🌰" : "🥚";
   switch (stage) {
     case 3:
       return "🐾";
     case 2:
       return "🐣";
-    case 1:
-      return "🐥";
     default:
-      return "🥚";
+      return "🐥";
   }
+}
+
+function daysWord(n: number): string {
+  if (n % 100 >= 11 && n % 100 <= 14) return "дней";
+  switch (n % 10) {
+    case 1:
+      return "день";
+    case 2:
+    case 3:
+    case 4:
+      return "дня";
+    default:
+      return "дней";
+  }
+}
+
+/** Карточка возраста (v1.9.0): возраст в днях и подарки за вехи. */
+function AgeCard({
+  pet,
+  onClaim,
+}: {
+  pet: Pet;
+  onClaim: (day: number) => void;
+}) {
+  const days = ageDays(pet);
+  const pending = pendingAgeBonuses(pet);
+  let nextMilestone: number | null = null;
+  for (const d of Object.keys(AGE_BONUSES).map(Number)) {
+    if (d > days && (nextMilestone === null || d < nextMilestone)) nextMilestone = d;
+  }
+  return (
+    <InfoCard>
+      <div className="flex items-center gap-3">
+        <span className="text-[22px]">🎂</span>
+        <div className="flex-1">
+          <p className="text-[14.5px] font-extrabold" style={{ color: C.ink }}>
+            Возраст: {days} {daysWord(days)}
+          </p>
+          <p className="text-[11.5px]" style={{ color: C.inkSoft }}>
+            {nextMilestone === null
+              ? "Все вехи возраста пройдены — легенда лужайки!"
+              : `Следующая веха: ${nextMilestone} дн. — подарок ${AGE_BONUSES[nextMilestone]} монеток`}
+          </p>
+        </div>
+      </div>
+      {pending.map((day) => (
+        <div key={day} className="mt-2 flex items-center gap-2">
+          <Gift size={18} style={{ color: C.green }} />
+          <span className="flex-1 text-[12.5px] font-semibold" style={{ color: C.ink }}>
+            Подарок за {day} {daysWord(day)}: +{AGE_BONUSES[day]} монеток и XP
+          </span>
+          <button
+            type="button"
+            className="rounded-xl px-3 py-1.5 text-[12.5px] font-extrabold text-white transition-transform active:scale-95"
+            style={{ backgroundColor: C.green }}
+            onClick={() => onClaim(day)}
+          >
+            Забрать
+          </button>
+        </div>
+      ))}
+    </InfoCard>
+  );
 }
 
 export function PetScreen() {
@@ -61,6 +128,7 @@ export function PetScreen() {
   const stopSession = useTTG((s) => s.stopSession);
   const openPetChoice = useTTG((s) => s.openPetChoice);
   const renamePet = useTTG((s) => s.renamePet);
+  const claimAgeBonus = useTTG((s) => s.claimAgeBonus);
 
   // Погода (v1.7.0): GPS → Open-Meteo, иначе погода по дате.
   useWeather();
@@ -99,7 +167,7 @@ export function PetScreen() {
       <div className="flex flex-wrap gap-2 px-4 pt-2">
         <Chip icon={Clock} text={`Сегодня: ${todayMinutes} мин`} />
         <Chip icon={Flame} text={`Серия: ${streakDays}`} />
-        <Chip icon={Coins} text={`🪙 ${coins}`} />
+        <CoinChip amount={coins} />
         {freezes > 0 && <Chip icon={Snowflake} text={`🧊 ×${freezes}`} />}
         <button
           type="button"
@@ -141,6 +209,19 @@ export function PetScreen() {
               <ProgressBar value={petLevelProgress(active.xp ?? 0)} />
             </div>
           </InfoCard>
+        )}
+        {active && (
+          <AgeCard
+            pet={active}
+            onClaim={(day) => {
+              const reward = claimAgeBonus(active.id, day);
+              toast(
+                reward > 0
+                  ? `Питомец с нами ${day} ${daysWord(day)} — подарок +${reward} монеток!`
+                  : "Подарок уже забран"
+              );
+            }}
+          />
         )}
         {running ? (
           <div
@@ -199,7 +280,7 @@ export function PetScreen() {
             <div className="flex items-center gap-2">
               <span className="text-lg">🐾</span>
               <span className="flex-1 truncate text-[15px] font-extrabold" style={{ color: C.ink }}>
-                {active ? `${active.name} — ${STAGE_NAMES[petStage(active)]}` : "Ждём новое яйцо"}
+                {active ? `${active.name} — ${stageName(active)}` : "Ждём нового питомца"}
               </span>
               {active && (
                 <>
@@ -294,7 +375,7 @@ export function PetScreen() {
                       </p>
                       <p className="text-[11.5px]" style={{ color: C.inkSoft }}>
                         {claimed
-                          ? `Награда получена: +${q.rewardCoins} 🪙 +${q.rewardXp} XP`
+                          ? `Награда получена: +${q.rewardCoins} монеток +${q.rewardXp} XP`
                           : `${q.hint} · ${prog}/${q.target}`}
                       </p>
                     </div>
@@ -306,7 +387,7 @@ export function PetScreen() {
                         className="rounded-xl px-3 py-1.5 text-[12.5px] font-extrabold text-white transition-transform active:scale-95"
                         style={{ backgroundColor: C.green }}
                         onClick={() => {
-                          if (claimQuest(q.id)) toast(`Награда: +${q.rewardCoins} 🪙 +${q.rewardXp} XP`);
+                          if (claimQuest(q.id)) toast(`Награда: +${q.rewardCoins} монеток +${q.rewardXp} XP`);
                         }}
                       >
                         Забрать
@@ -376,7 +457,7 @@ export function PetScreen() {
                     borderColor: adult ? C.green : "#F0E0C0",
                   }}
                 >
-                  {stageEmoji(petStage(p))} {p.name} · {STAGE_NAMES[petStage(p)]}
+                  {stageEmoji(petStage(p), isPlant(p.type))} {p.name} · {stageName(p)}
                 </span>
               );
             })}

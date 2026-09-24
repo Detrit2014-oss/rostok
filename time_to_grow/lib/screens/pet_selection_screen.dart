@@ -50,13 +50,14 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
     return kPetCatalog.where(keep).toList();
   }
 
-  /// Превью-питомец стадии «Малыш» — показывает, кем станет яйцо.
+  /// Превью-питомец стадии «Малыш» — показывает, кем станет яйцо/семечко.
   Pet _preview(PetType type) => Pet(
         id: 'preview-${type.name}',
         name: speciesOfType(type).name,
         type: type,
         bornAt: 0,
         growthMinutes: Pet.stageThresholds[1],
+        fromSeed: kPlantPets.contains(type),
       );
 
   void _confirm() {
@@ -107,7 +108,8 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Он вырастет, пока вы отдыхаете от телефона. '
+                      'Звери вылупляются из яйца, растения растим из семечка. '
+                          'Питомец растёт, пока вы отдыхаете от телефона. '
                           'Всего видов: ${kPetCatalog.length}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -171,7 +173,9 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                     BigButton(
                       label: _selected == null
                           ? 'Выберите питомца'
-                          : 'Встречаем «${speciesOfType(_selected!).accusative}»!',
+                          : isPlant(_selected!)
+                              ? 'Сажаем семечко «${speciesOfType(_selected!).accusative}»!'
+                              : 'Встречаем «${speciesOfType(_selected!).accusative}»!',
                       icon: Icons.emoji_nature_rounded,
                       fullWidth: true,
                       onPressed: _selected == null ? null : _confirm,

@@ -212,3 +212,18 @@
 .ttg-snow {
   animation: ttg-snow-fall 6s linear infinite;
 }
+
+/* v1.9.0: мигание глаз реалистичных зверей (лёгкое прижмуривание). */
+@keyframes ttg-blink {
+  0%, 93.5%, 97.5%, 100% {
+    transform: scaleY(1);
+  }
+  95.5% {
+    transform: scaleY(0.1);
+  }
+}
+.ttg-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ttg-blink 4.2s linear infinite;
+}

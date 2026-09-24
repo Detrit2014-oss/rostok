@@ -1,0 +1,1379 @@
+     1→import 'dart:math' as math;
+     2→
+     3→import 'package:flutter/material.dart';
+     4→
+     5→import '../data/species_style.dart';
+     6→import '../models/pet.dart';
+     7→
+     8→/// Анимированная сцена «Ростка»: небо, солнце, облака, лужайка, погода
+     9→/// (v1.7.0) и питомцы, нарисованные полностью процедурно (CustomPaint).
+    10→///
+    11→/// v1.8.0: настоящие лапы с пальцами (не «палки»), питомцы спят ЛЁЖА,
+    12→/// водные жители живут в пруду по центру лужайки, декоративные рамки.
+    13→class PetCanvas extends StatefulWidget {
+    14→  const PetCanvas({
+    15→    super.key,
+    16→    required this.pets,
+    17→    this.sleeping = false,
+    18→    this.weather,
+    19→    this.frame = 'none',
+    20→  });
+    21→
+    22→  final List<Pet> pets;
+    23→
+    24→  /// true — идёт сессия детокса: питомцы спят ЛЁЖА и «копят» рост (zzz).
+    25→  final bool sleeping;
+    26→
+    27→  /// Погодное состояние сцены: null|partly|cloudy|fog|rain|snow|thunder.
+    28→  final String? weather;
+    29→
+    30→  /// Декоративная рамка из магазина: none|gold|neon|flower.
+    31→  final String frame;
+    32→
+    33→  @override
+    34→  State<PetCanvas> createState() => _PetCanvasState();
+    35→}
+    36→
+    37→class _PetCanvasState extends State<PetCanvas>
+    38→    with SingleTickerProviderStateMixin {
+    39→  late final AnimationController _phase =
+    40→      AnimationController(vsync: this, duration: const Duration(seconds: 4))
+    41→        ..repeat();
+    42→
+    43→  @override
+    44→  void dispose() {
+    45→    _phase.dispose();
+    46→    super.dispose();
+    47→  }
+    48→
+    49→  @override
+    50→  Widget build(BuildContext context) {
+    51→    return AnimatedBuilder(
+    52→      animation: _phase,
+    53→      builder: (BuildContext context, Widget? _) {
+    54→        return CustomPaint(
+    55→          size: Size.infinite,
+    56→          painter: _PetScenePainter(
+    57→            pets: widget.pets,
+    58→            phase: _phase.value,
+    59→            sleeping: widget.sleeping,
+    60→            weather: widget.weather,
+    61→            frame: widget.frame,
+    62→          ),
+    63→        );
+    64→      },
+    65→    );
+    66→  }
+    67→}
+    68→
+    69→class _PetScenePainter extends CustomPainter {
+    70→  _PetScenePainter({
+    71→    required this.pets,
+    72→    required this.phase,
+    73→    required this.sleeping,
+    74→    required this.weather,
+    75→    required this.frame,
+    76→  });
+    77→
+    78→  final List<Pet> pets;
+    79→  final double phase;
+    80→  final bool sleeping;
+    81→  final String? weather;
+    82→  final String frame;
+    83→
+    84→  bool get _dimSky =>
+    85→      weather == 'cloudy' || weather == 'rain' || weather == 'thunder';
+    86→  bool get _hasPond => pets.any((Pet p) => isAquatic(p.type));
+    87→
+    88→  @override
+    89→  void paint(Canvas canvas, Size size) {
+    90→    _paintSky(canvas, size);
+    91→    _paintGround(canvas, size);
+    92→    if (_hasPond) _paintPond(canvas, size);
+    93→    _paintPets(canvas, size);
+    94→    _paintWeather(canvas, size);
+    95→    if (frame != 'none') _paintFrame(canvas, size);
+    96→  }
+    97→
+    98→  // ── Небо и погода ────────────────────────────────────────────────────
+    99→  void _paintSky(Canvas canvas, Size size) {
+   100→    final Rect rect = Offset.zero & size;
+   101→    final List<Color> colors = switch (weather) {
+   102→      'thunder' => const <Color>[Color(0xFF6B7B95), Color(0xFFB9C6A8)],
+   103→      'rain' => const <Color>[Color(0xFF8FB8CF), Color(0xFFCBE3C8)],
+   104→      'cloudy' => const <Color>[Color(0xFFAFC6D6), Color(0xFFE2EFD8)],
+   105→      'snow' => const <Color>[Color(0xFFBAD8EE), Color(0xFFEFF7EF)],
+   106→      _ => const <Color>[Color(0xFFA6E4FF), Color(0xFFEAF9E0)],
+   107→    };
+   108→    canvas.drawRect(
+   109→      rect,
+   110→      Paint()
+   111→        ..shader = LinearGradient(
+   112→          begin: Alignment.topCenter,
+   113→          end: Alignment.bottomCenter,
+   114→          colors: colors,
+   115→        ).createShader(rect),
+   116→    );
+   117→
+   118→    // Солнце с гало — прячется при непогоде.
+   119→    if (!_dimSky) {
+   120→      final Offset sun = Offset(size.width * 0.16, size.height * 0.14);
+   121→      canvas.drawCircle(sun, size.width * 0.085,
+   122→          Paint()..color = const Color(0xFFFFC800).withOpacity(0.25));
+   123→      canvas.drawCircle(sun, size.width * 0.055,
+   124→          Paint()..color = const Color(0xFFFFC800));
+   125→    }
+   126→
+   127→    // Облака: обычные две + доп. при частичной/пасмурной погоде.
+   128→    _paintCloud(canvas, Offset(size.width * 0.55, size.height * 0.14),
+   129→        size.width * 0.045);
+   130→    _paintCloud(canvas, Offset(size.width * 0.78, size.height * 0.24),
+   131→        size.width * 0.035);
+   132→    if (weather == 'partly' || weather == 'cloudy' || weather == 'rain') {
+   133→      _paintCloud(canvas, Offset(size.width * 0.32, size.height * 0.10),
+   134→          size.width * 0.038);
+   135→      _paintCloud(canvas, Offset(size.width * 0.92, size.height * 0.09),
+   136→          size.width * 0.03);
+   137→    }
+   138→  }
+   139→
+   140→  void _paintCloud(Canvas canvas, Offset center, double r) {
+   141→    final Paint p = Paint()..color = Colors.white.withOpacity(0.9);
+   142→    canvas.drawCircle(center + Offset(-r * 0.8, r * 0.25), r * 0.65, p);
+   143→    canvas.drawCircle(center, r, p);
+   144→    canvas.drawCircle(center + Offset(r * 0.8, r * 0.25), r * 0.6, p);
+   145→  }
+   146→
+   147→  void _paintWeather(Canvas canvas, Size size) {
+   148→    switch (weather) {
+   149→      case 'fog':
+   150→        for (int i = 0; i < 3; i++) {
+   151→          final double y =
+   152→              size.height * (0.45 + 0.16 * i) + math.sin(phase * 6.28 + i) * 8;
+   153→          final Rect band =
+   154→              Rect.fromLTWH(-20 + math.sin(phase * 6.28 + i * 2) * 14, y,
+   155→                  size.width + 40, size.height * 0.075);
+   156→          canvas.drawRRect(
+   157→            RRect.fromRectAndRadius(band, const Radius.circular(20)),
+   158→            Paint()..color = Colors.white.withOpacity(0.38 - i * 0.07),
+   159→          );
+   160→        }
+   161→        break;
+   162→      case 'rain':
+   163→        final Paint drop = Paint()
+   164→          ..color = const Color(0xFF9FD4EF).withOpacity(0.75)
+   165→          ..strokeWidth = 2.2
+   166→          ..strokeCap = StrokeCap.round;
+   167→        for (int i = 0; i < 34; i++) {
+   168→          final double fx = ((i * 97) % 100) / 100;
+   169→          final double fall = ((phase * 2.2 + fx * 3.0) % 1.0);
+   170→          final double x = size.width * fx + fall * 18;
+   171→          final double y = size.height * (fall - 0.08);
+   172→          canvas.drawLine(Offset(x, y), Offset(x - 5, y + 16), drop);
+   173→        }
+   174→        break;
+   175→      case 'snow':
+   176→        final Paint flake = Paint()..color = Colors.white.withOpacity(0.9);
+   177→        for (int i = 0; i < 26; i++) {
+   178→          final double fx = ((i * 61) % 100) / 100;
+   179→          final double fall = ((phase * 0.9 + fx * 2.4) % 1.0);
+   180→          final double x = size.width * fx + math.sin(fall * 9 + i) * 14;
+   181→          final double y = size.height * fall;
+   182→          canvas.drawCircle(Offset(x, y), 2.4 + (i % 3), flake);
+   183→        }
+   184→        break;
+   185→      case 'thunder':
+   186→        // Тёмная вуаль.
+   187→        canvas.drawRect(
+   188→          Offset.zero & size,
+   189→          Paint()..color = const Color(0xFF2E3A55).withOpacity(0.22),
+   190→        );
+   191→        // Вспышка молнии в узком окне цикла.
+   192→        final double cyc = (phase * 1.35) % 1.0;
+   193→        if (cyc < 0.09) {
+   194→          final double flash = (1 - cyc / 0.09).clamp(0.0, 1.0);
+   195→          canvas.drawRect(
+   196→            Offset.zero & size,
+   197→            Paint()..color = Colors.white.withOpacity(0.30 * flash),
+   198→          );
+   199→          final Paint bolt = Paint()
+   200→            ..color = const Color(0xFFFFE45C)
+   201→            ..style = PaintingStyle.stroke
+   202→            ..strokeWidth = 4.5
+   203→            ..strokeJoin = StrokeJoin.round
+   204→            ..strokeCap = StrokeCap.round;
+   205→          final double bx = size.width * 0.68;
+   206→          final Path p = Path()
+   207→            ..moveTo(bx, size.height * 0.06)
+   208→            ..lineTo(bx - 26, size.height * 0.30)
+   209→            ..lineTo(bx + 6, size.height * 0.32)
+   210→            ..lineTo(bx - 20, size.height * 0.62);
+   211→          canvas.drawPath(p, bolt);
+   212→        }
+   213→        break;
+   214→      default:
+   215→        break;
+   216→    }
+   217→  }
+   218→
+   219→  // ── Земля и пруд ─────────────────────────────────────────────────────
+   220→  void _paintGround(Canvas canvas, Size size) {
+   221→    final double groundY = size.height * 0.74;
+   222→    final Rect rect =
+   223→        Rect.fromLTWH(0, groundY, size.width, size.height - groundY);
+   224→    canvas.drawRRect(
+   225→      RRect.fromRectAndCorners(
+   226→        rect,
+   227→        topLeft: const Radius.circular(28),
+   228→        topRight: const Radius.circular(28),
+   229→      ),
+   230→      Paint()..color = const Color(0xFF90D26D),
+   231→    );
+   232→
+   233→    // Кустики для объёма
+   234→    final Paint bush = Paint()..color = const Color(0xFF7FC45C);
+   235→    canvas.drawCircle(
+   236→        Offset(size.width * 0.12, groundY + size.height * 0.09), 22, bush);
+   237→    canvas.drawCircle(
+   238→        Offset(size.width * 0.90, groundY + size.height * 0.07), 18, bush);
+   239→
+   240→    // Цветочки
+   241→    final List<Offset> flowers = <Offset>[
+   242→      Offset(size.width * 0.06, groundY + size.height * 0.14),
+   243→      Offset(size.width * 0.28, groundY + size.height * 0.10),
+   244→      Offset(size.width * 0.72, groundY + size.height * 0.16),
+   245→      Offset(size.width * 0.95, groundY + size.height * 0.12),
+   246→    ];
+   247→    final List<Color> fColors = <Color>[
+   248→      const Color(0xFFFF8FB1),
+   249→      const Color(0xFFFFD166),
+   250→      const Color(0xFFEF476F),
+   251→      const Color(0xFFFFD166),
+   252→    ];
+   253→    for (int i = 0; i < flowers.length; i++) {
+   254→      canvas.drawCircle(
+   255→          flowers[i], 4, Paint()..color = fColors[i % fColors.length]);
+   256→      canvas.drawCircle(flowers[i], 1.6, Paint()..color = Colors.white);
+   257→    }
+   258→  }
+   259→
+   260→  /// Пруд по центру лужайки (v1.8.0) — дом водных питомцев.
+   261→  void _paintPond(Canvas canvas, Size size) {
+   262→    final double groundY = size.height * 0.74;
+   263→    final Offset c = Offset(size.width * 0.5, groundY + size.height * 0.10);
+   264→    final double rw = size.width * 0.30;
+   265→    final double rh = size.height * 0.115;
+   266→
+   267→    // Песчаный берег.
+   268→    canvas.drawOval(
+   269→      Rect.fromCenter(center: c, width: rw * 2.16, height: rh * 2.16),
+   270→      Paint()..color = const Color(0xFFE8D8A8),
+   271→    );
+   272→    // Вода.
+   273→    canvas.drawOval(
+   274→      Rect.fromCenter(center: c, width: rw * 2, height: rh * 2),
+   275→      Paint()..color = const Color(0xFF6EC1E4),
+   276→    );
+   277→    // Блики-волны.
+   278→    final Paint wave = Paint()
+   279→      ..color = Colors.white.withOpacity(0.5)
+   280→      ..style = PaintingStyle.stroke
+   281→      ..strokeWidth = 2
+   282→      ..strokeCap = StrokeCap.round;
+   283→    for (int i = 0; i < 3; i++) {
+   284→      final double wy = c.dy - rh * 0.4 + i * rh * 0.42;
+   285→      final Rect wr = Rect.fromCenter(
+   286→        center: Offset(c.dx + (i - 1) * rw * 0.18, wy),
+   287→        width: rw * 0.5,
+   288→        height: rh * 0.2,
+   289→      );
+   290→      canvas.drawArc(wr, 0.15 * math.pi, 0.7 * math.pi, false, wave);
+   291→    }
+   292→  }
+   293→
+   294→  /// Передняя кромка воды — перекрывает нижнюю часть тела водного питомца.
+   295→  void _paintWaterFront(Canvas canvas, Offset pondC, double rw, double rh) {
+   296→    canvas.drawOval(
+   297→      Rect.fromCenter(center: pondC, width: rw * 2, height: rh * 2),
+   298→      Paint()..color = const Color(0xFF6EC1E4).withOpacity(0.45),
+   299→    );
+   300→    // Круги на воде.
+   301→    final Paint ripple = Paint()
+   302→      ..color = Colors.white.withOpacity(0.55)
+   303→      ..style = PaintingStyle.stroke
+   304→      ..strokeWidth = 2
+   305→      ..strokeCap = StrokeCap.round;
+   306→    for (int i = 0; i < 2; i++) {
+   307→      final double t = ((phase * 1.2 + i * 0.5) % 1.0);
+   308→      canvas.drawOval(
+   309→        Rect.fromCenter(
+   310→          center: pondC + Offset(0, rh * 0.3),
+   311→          width: rw * (0.7 + t * 0.9),
+   312→          height: rh * (0.7 + t * 0.9) * 0.42,
+   313→        ),
+   314→        ripple..color = Colors.white.withOpacity(0.55 * (1 - t)),
+   315→      );
+   316→    }
+   317→  }
+   318→
+   319→  // ── Питомцы ──────────────────────────────────────────────────────────
+   320→  void _paintPets(Canvas canvas, Size size) {
+   321→    if (pets.isEmpty) return;
+   322→    final double groundY = size.height * 0.76;
+   323→
+   324→    // Сначала сухопутные, затем водные (они в пруду поверх воды).
+   325→    final Offset pondC =
+   326→        Offset(size.width * 0.5, size.height * 0.74 + size.height * 0.10);
+   327→    final double prw = size.width * 0.30;
+   328→    final double prh = size.height * 0.115;
+   329→
+   330→    final List<Pet> land =
+   331→        pets.where((Pet p) => !isAquatic(p.type)).toList();
+   332→    final List<Pet> water = pets.where((Pet p) => isAquatic(p.type)).toList();
+   333→
+   334→    for (int i = 0; i < land.length; i++) {
+   335→      final Pet pet = land[i];
+   336→      final double t = land.length == 1 ? 0.5 : 0.14 + 0.72 * i / (land.length - 1);
+   337→      final double x = size.width * t;
+   338→      final double bounce =
+   339→          math.sin(phase * 2 * math.pi + i * 1.7) * (sleeping ? 0.5 : 2.5);
+   340→      final Offset base = Offset(x, groundY - bounce);
+   341→      _paintPet(canvas, base, pet, i, pondC: null);
+   342→    }
+   343→
+   344→    for (int i = 0; i < water.length; i++) {
+   345→      final Pet pet = water[i];
+   346→      final double bounce = math.sin(phase * 2 * math.pi * 0.6 + i * 2.1) * 3;
+   347→      // Водные питомцы плавают по центру пруда (можно несколько — в ряд).
+   348→      final double dx =
+   349→          water.length == 1 ? 0 : (i - (water.length - 1) / 2) * prw * 0.55;
+   350→      final Offset base = Offset(pondC.dx + dx, pondC.dy - prh * 0.35 - bounce);
+   351→      _paintPet(canvas, base, pet, i, pondC: Offset(pondC.dx, pondC.dy));
+   352→    }
+   353→
+   354→    // Передняя вода поверх водных питомцев — тела «погружены».
+   355→    if (water.isNotEmpty) _paintWaterFront(canvas, pondC, prw, prh);
+   356→  }
+   357→
+   358→  Color _frameColor() => switch (frame) {
+   359→        'gold' => const Color(0xFFFFC800),
+   360→        'neon' => const Color(0xFF1CB0F6),
+   361→        'flower' => const Color(0xFFFF8FB1),
+   362→        _ => const Color(0x00000000),
+   363→      };
+   364→
+   365→  void _paintFrame(Canvas canvas, Size size) {
+   366→    final Color c = _frameColor();
+   367→    if (c.a == 0) return;
+   368→    final Rect r = (Offset.zero & size).deflate(7);
+   369→    final Paint p = Paint()
+   370→      ..style = PaintingStyle.stroke
+   371→      ..strokeWidth = 5.5
+   372→      ..color = c;
+   373→    canvas.drawRRect(
+   374→      RRect.fromRectAndRadius(r, const Radius.circular(24)),
+   375→      p,
+   376→    );
+   377→    // Уголки-бусины.
+   378→    final Paint bead = Paint()..color = c.withOpacity(0.85);
+   379→    for (final Offset o in <Offset>[
+   380→      Offset(r.left + 10, r.top + 10),
+   381→      Offset(r.right - 10, r.top + 10),
+   382→      Offset(r.left + 10, r.bottom - 10),
+   383→      Offset(r.right - 10, r.bottom - 10),
+   384→    ]) {
+   385→      canvas.drawCircle(o, 4.5, bead);
+   386→    }
+   387→    if (frame == 'flower') {
+   388→      for (final Offset o in <Offset>[
+   389→        Offset(size.width * 0.5, r.top + 9),
+   390→        Offset(size.width * 0.5, r.bottom - 9),
+   391→      ]) {
+   392→        canvas.drawCircle(o, 4, bead);
+   393→        canvas.drawCircle(o, 1.8, Paint()..color = Colors.white);
+   394→      }
+   395→    }
+   396→  }
+   397→
+   398→  /// Главный вход: рисует питомца (яйцо / зверя / растение).
+   399→  /// [pondC] — центр пруда, если питомец водный.
+   400→  void _paintPet(Canvas canvas, Offset base, Pet pet, int index,
+   401→      {Offset? pondC}) {
+   402→    final Color body = speciesBody(pet.type);
+   403→    if (pet.stage == 0) {
+   404→      _paintEgg(canvas, base, body, pet.stageProgress);
+   405→      return;
+   406→    }
+   407→    if (isPlant(pet.type)) {
+   408→      _paintPlant(canvas, base, pet);
+   409→      return;
+   410→    }
+   411→
+   412→    final SpeciesStyle st =
+   413→        kSpeciesStyles[pet.type] ?? kSpeciesStyles[PetType.fox]!;
+   414→    final Color belly = speciesBelly(pet.type);
+   415→    final bool lying = sleeping; // v1.8.0: спим только ЛЁЖА.
+   416→    final double scale = 0.55 + pet.stage * 0.22;
+   417→    final double bw = 64 * scale;
+   418→    final double bh = (lying ? 44 * 0.74 : 54) * scale;
+   419→    final PetType type = pet.type;
+   420→
+   421→    canvas.save();
+   422→    if (lying) {
+   423→      // Лёжа: чуть сплющиваем и присыпаем «одеялом» тишины.
+   424→      canvas.translate(base.dx, base.dy);
+   425→      canvas.scale(1.0, 0.86);
+   426→      canvas.translate(-base.dx, -base.dy);
+   427→    }
+   428→
+   429→    final Offset bodyC = base - Offset(0, bh / 2 - (lying ? 2 : 0));
+   430→    final Paint earPaint = Paint()..color = body;
+   431→    final double earY = bodyC.dy - bh * 0.42;
+   432→    final double legH = bh * 0.30;
+   433→
+   434→    // ── За телом: хвост, лапы (настоящие, с пальцами) ─────────────────
+   435→    _paintTail(canvas, bodyC, bw, bh, st.tail, body, scale);
+   436→
+   437→    if (!lying && !isAquatic(type)) {
+   438→      _paintLegs(canvas, base, bw, legH, body, belly, scale);
+   439→    }
+   440→
+   441→    // ── Тело и животик ────────────────────────────────────────────────
+   442→    canvas.drawOval(
+   443→      Rect.fromCenter(center: bodyC, width: bw, height: bh),
+   444→      Paint()..color = body,
+   445→    );
+   446→    canvas.drawOval(
+   447→      Rect.fromCenter(
+   448→        center: bodyC + Offset(0, bh * 0.18),
+   449→        width: bw * 0.62,
+   450→        height: bh * 0.5,
+   451→      ),
+   452→      Paint()..color = belly,
+   453→    );
+   454→
+   455→    // ── Особые детали поверх тела ─────────────────────────────────────
+   456→    _paintExtra(canvas, bodyC, bw, bh, st.extra, type, body, scale);
+   457→
+   458→    // ── Уши ───────────────────────────────────────────────────────────
+   459→    _paintEars(canvas, bodyC, bw, bh, st.ear, body, belly, scale, earY);
+   460→
+   461→    // ── Лицо ──────────────────────────────────────────────────────────
+   462→    _paintFace(canvas, bodyC, bw, bh, st, type, belly, scale, lying);
+   463→
+   464→    canvas.restore();
+   465→
+   466→    // zzz над спящим питомцем
+   467→    if (sleeping && index == pets.length - 1) {
+   468→      _paintZzz(canvas, Offset(bodyC.dx + bw * 0.55, bodyC.dy - bh * 0.7), scale);
+   469→    }
+   470→  }
+   471→
+   472→  // ── Части тела ───────────────────────────────────────────────────────
+   473→  void _paintLegs(Canvas canvas, Offset base, double bw, double legH,
+   474→      Color body, Color belly, double scale) {
+   475→    final Paint leg = Paint()..color = body;
+   476→    final Paint paw = Paint()..color = Color.alphaBlend(body.withOpacity(0.72), Colors.black12);
+   477→    final Paint toe = Paint()..color = belly;
+   478→    final double legW = bw * 0.15;
+   479→    final double topY = base.dy - legH * 1.55;
+   480→    for (final double sx in <double>[-0.30, 0.30]) {
+   481→      final double x = base.dx + bw * sx;
+   482→      // Нога — скруглённый столбик с лёгким сужением.
+   483→      canvas.drawRRect(
+   484→        RRect.fromRectAndRadius(
+   485→          Rect.fromLTWH(x - legW / 2, topY, legW, legH * 1.55),
+   486→          Radius.circular(legW * 0.45),
+   487→        ),
+   488→        leg,
+   489→      );
+   490→      // Ступня-лапка с пальцами.
+   491→      final Offset footC = Offset(x, base.dy - 2);
+   492→      canvas.drawOval(
+   493→        Rect.fromCenter(
+   494→            center: footC, width: legW * 1.9, height: legW * 1.15),
+   495→        paw,
+   496→      );
+   497→      for (int t = -1; t <= 1; t++) {
+   498→        canvas.drawCircle(
+   499→          Offset(footC.dx + t * legW * 0.5, footC.dy + legW * 0.18),
+   500→          legW * 0.16,
+   501→          toe,
+   502→        );
+   503→      }
+   504→    }
+   505→  }
+   506→
+   507→  void _paintTail(Canvas canvas, Offset bodyC, double bw, double bh,
+   508→      String kind, Color body, double scale) {
+   509→    final Paint p = Paint()..color = body;
+   510→    switch (kind) {
+   511→      case 'bushy':
+   512→        final Path tail = Path()
+   513→          ..moveTo(bodyC.dx + bw * 0.44, bodyC.dy + bh * 0.22)
+   514→          ..quadraticBezierTo(bodyC.dx + bw * 0.95, bodyC.dy + bh * 0.05,
+   515→              bodyC.dx + bw * 0.78, bodyC.dy - bh * 0.5)
+   516→          ..quadraticBezierTo(bodyC.dx + bw * 0.62, bodyC.dy - bh * 0.05,
+   517→              bodyC.dx + bw * 0.44, bodyC.dy + bh * 0.22)
+   518→          ..close();
+   519→        canvas.drawPath(tail, p);
+   520→        break;
+   521→      case 'thin':
+   522→        final Paint tp = Paint()
+   523→          ..color = body
+   524→          ..style = PaintingStyle.stroke
+   525→          ..strokeWidth = 5 * scale
+   526→          ..strokeCap = StrokeCap.round;
+   527→        final Path t = Path()
+   528→          ..moveTo(bodyC.dx + bw * 0.46, bodyC.dy + bh * 0.2)
+   529→          ..quadraticBezierTo(bodyC.dx + bw * 0.78, bodyC.dy + bh * 0.28,
+   530→              bodyC.dx + bw * 0.72, bodyC.dy - bh * 0.12);
+   531→        canvas.drawPath(t, tp);
+   532→        break;
+   533→      case 'curl':
+   534→        final Paint tp = Paint()
+   535→          ..color = body
+   536→          ..style = PaintingStyle.stroke
+   537→          ..strokeWidth = 5.5 * scale
+   538→          ..strokeCap = StrokeCap.round;
+   539→        canvas.drawCircle(Offset(bodyC.dx + bw * 0.55, bodyC.dy + bh * 0.12),
+   540→            6.5 * scale, tp);
+   541→        break;
+   542→      case 'puff':
+   543→        canvas.drawOval(
+   544→          Rect.fromCenter(
+   545→            center: Offset(bodyC.dx + bw * 0.55, bodyC.dy + bh * 0.05),
+   546→            width: bw * 0.26,
+   547→            height: bh * 0.34,
+   548→          ),
+   549→          p,
+   550→        );
+   551→        break;
+   552→      default:
+   553→        break;
+   554→    }
+   555→  }
+   556→
+   557→  void _paintEars(Canvas canvas, Offset bodyC, double bw, double bh,
+   558→      String kind, Color body, Color belly, double scale, double earY) {
+   559→    final Paint earPaint = Paint()..color = body;
+   560→    switch (kind) {
+   561→      case 'triangle':
+   562→      case 'antler':
+   563→        final Path leftEar = Path()
+   564→          ..moveTo(bodyC.dx - bw * 0.32, earY + bh * 0.1)
+   565→          ..lineTo(bodyC.dx - bw * 0.18, earY - bh * 0.22)
+   566→          ..lineTo(bodyC.dx - bw * 0.05, earY + bh * 0.05)
+   567→          ..close();
+   568→        final Path rightEar = Path()
+   569→          ..moveTo(bodyC.dx + bw * 0.32, earY + bh * 0.1)
+   570→          ..lineTo(bodyC.dx + bw * 0.18, earY - bh * 0.22)
+   571→          ..lineTo(bodyC.dx + bw * 0.05, earY + bh * 0.05)
+   572→          ..close();
+   573→        canvas.drawPath(leftEar, earPaint);
+   574→        canvas.drawPath(rightEar, earPaint);
+   575→        if (kind == 'antler') {
+   576→          // Рожки оленёнка над ушами.
+   577→          final Paint antler = Paint()
+   578→            ..color = const Color(0xFF8B5E34)
+   579→            ..style = PaintingStyle.stroke
+   580→            ..strokeWidth = 3.6 * scale
+   581→            ..strokeCap = StrokeCap.round;
+   582→          for (final double sx in <double>[-0.16, 0.16]) {
+   583→            final Path a = Path()
+   584→              ..moveTo(bodyC.dx + bw * sx, earY - bh * 0.16)
+   585→              ..lineTo(bodyC.dx + bw * sx * 1.5, earY - bh * 0.52)
+   586→              ..moveTo(bodyC.dx + bw * sx * 1.28, earY - bh * 0.36)
+   587→              ..lineTo(bodyC.dx + bw * sx * 1.72, earY - bh * 0.44);
+   588→            canvas.drawPath(a, antler);
+   589→          }
+   590→        }
+   591→        break;
+   592→      case 'long':
+   593→        for (final double sx in <double>[-0.16, 0.16]) {
+   594→          canvas.drawRRect(
+   595→            RRect.fromRectAndRadius(
+   596→              Rect.fromCenter(
+   597→                center: Offset(bodyC.dx + bw * sx, bodyC.dy - bh * 0.62),
+   598→                width: bw * 0.17,
+   599→                height: bh * 0.62,
+   600→              ),
+   601→              Radius.circular(bw * 0.085),
+   602→            ),
+   603→            earPaint,
+   604→          );
+   605→          canvas.drawRRect(
+   606→            RRect.fromRectAndRadius(
+   607→              Rect.fromCenter(
+   608→                center: Offset(bodyC.dx + bw * sx, bodyC.dy - bh * 0.56),
+   609→                width: bw * 0.08,
+   610→                height: bh * 0.42,
+   611→              ),
+   612→              Radius.circular(bw * 0.04),
+   613→            ),
+   614→            Paint()..color = const Color(0xFFF5B8C4),
+   615→          );
+   616→        }
+   617→        break;
+   618→      case 'round':
+   619→        canvas.drawCircle(
+   620→            Offset(bodyC.dx - bw * 0.3, earY - bh * 0.06), 8 * scale, earPaint);
+   621→        canvas.drawCircle(
+   622→            Offset(bodyC.dx + bw * 0.3, earY - bh * 0.06), 8 * scale, earPaint);
+   623→        canvas.drawCircle(
+   624→            Offset(bodyC.dx - bw * 0.3, earY - bh * 0.06),
+   625→            4 * scale,
+   626→            Paint()..color = belly);
+   627→        canvas.drawCircle(
+   628→            Offset(bodyC.dx + bw * 0.3, earY - bh * 0.06),
+   629→            4 * scale,
+   630→            Paint()..color = belly);
+   631→        break;
+   632→      case 'pom':
+   633→        canvas.drawCircle(
+   634→            Offset(bodyC.dx - bw * 0.27, earY - bh * 0.06),
+   635→            7.5 * scale,
+   636→            earPaint);
+   637→        canvas.drawCircle(
+   638→            Offset(bodyC.dx + bw * 0.27, earY - bh * 0.06),
+   639→            7.5 * scale,
+   640→            earPaint);
+   641→        break;
+   642→      case 'tuft':
+   643→        canvas.drawCircle(Offset(bodyC.dx - bw * 0.22, earY - bh * 0.02),
+   644→            6 * scale, earPaint);
+   645→        canvas.drawCircle(Offset(bodyC.dx + bw * 0.22, earY - bh * 0.02),
+   646→            6 * scale, earPaint);
+   647→        break;
+   648→      case 'horns':
+   649→        final Paint horn = Paint()..color = const Color(0xFFF6E7C1);
+   650→        canvas.drawCircle(Offset(bodyC.dx - bw * 0.14, earY - bh * 0.06),
+   651→            4 * scale, horn);
+   652→        canvas.drawCircle(Offset(bodyC.dx + bw * 0.14, earY - bh * 0.06),
+   653→            4 * scale, horn);
+   654→        break;
+   655→      case 'crest':
+   656→        final Paint tuft = Paint()..color = body;
+   657→        canvas.drawCircle(Offset(bodyC.dx - bw * 0.07, bodyC.dy - bh * 0.52),
+   658→            2.6 * scale, tuft);
+   659→        canvas.drawCircle(Offset(bodyC.dx, bodyC.dy - bh * 0.58),
+   660→            2.8 * scale, tuft);
+   661→        canvas.drawCircle(Offset(bodyC.dx + bw * 0.07, bodyC.dy - bh * 0.52),
+   662→            2.6 * scale, tuft);
+   663→        break;
+   664→      default:
+   665→        break;
+   666→    }
+   667→  }
+   668→
+   669→  void _paintExtra(Canvas canvas, Offset bodyC, double bw, double bh,
+   670→      String kind, PetType type, Color body, double scale) {
+   671→    switch (kind) {
+   672→      case 'spikes':
+   673→        final Paint spike = Paint()..color = kSpike;
+   674→        const List<double> angles = <double>[-2.45, -2.0, -1.57, -1.14, -0.7];
+   675→        for (final double a in angles) {
+   676→          final Offset tip = Offset(
+   677→            bodyC.dx + bw * 0.5 * 1.42 * math.cos(a),
+   678→            bodyC.dy + bh * 0.5 * 1.42 * math.sin(a),
+   679→          );
+   680→          final Offset b1 = Offset(
+   681→            bodyC.dx + bw * 0.5 * math.cos(a + 0.16),
+   682→            bodyC.dy + bh * 0.5 * math.sin(a + 0.16),
+   683→          );
+   684→          final Offset b2 = Offset(
+   685→            bodyC.dx + bw * 0.5 * math.cos(a - 0.16),
+   686→            bodyC.dy + bh * 0.5 * math.sin(a - 0.16),
+   687→          );
+   688→          canvas.drawPath(
+   689→            Path()
+   690→              ..moveTo(b1.dx, b1.dy)
+   691→              ..lineTo(tip.dx, tip.dy)
+   692→              ..lineTo(b2.dx, b2.dy)
+   693→              ..close(),
+   694→            spike,
+   695→          );
+   696→        }
+   697→        break;
+   698→      case 'wings':
+   699→        if (scale >= 0.55 + 2 * 0.22) {
+   700→          final Paint wing = Paint()..color = body.withOpacity(0.75);
+   701→          final Path leftWing = Path()
+   702→            ..moveTo(bodyC.dx - bw * 0.3, bodyC.dy - bh * 0.1)
+   703→            ..quadraticBezierTo(bodyC.dx - bw * 0.9, bodyC.dy - bh * 0.9,
+   704→                bodyC.dx - bw * 0.2, bodyC.dy - bh * 0.55)
+   705→            ..close();
+   706→          final Path rightWing = Path()
+   707→            ..moveTo(bodyC.dx + bw * 0.3, bodyC.dy - bh * 0.1)
+   708→            ..quadraticBezierTo(bodyC.dx + bw * 0.9, bodyC.dy - bh * 0.9,
+   709→                bodyC.dx + bw * 0.2, bodyC.dy - bh * 0.55)
+   710→            ..close();
+   711→          canvas.drawPath(leftWing, wing);
+   712→          canvas.drawPath(rightWing, wing);
+   713→        }
+   714→        break;
+   715→      case 'mane':
+   716→        // Радужная грива единорога — дуга из 5 цветных прядей.
+   717→        final List<Color> mane = <Color>[
+   718→          const Color(0xFFEF476F),
+   719→          const Color(0xFFFF9F45),
+   720→          const Color(0xFFFFD166),
+   721→          const Color(0xFF62C46A),
+   722→          const Color(0xFF1CB0F6),
+   723→        ];
+   724→        for (int i = 0; i < mane.length; i++) {
+   725→          final double a = -2.2 + i * 0.28;
+   726→          canvas.drawCircle(
+   727→            Offset(
+   728→              bodyC.dx - bw * 0.42 * math.cos(a),
+   729→              bodyC.dy - bh * 0.5 - bh * 0.12 * math.sin(a),
+   730→            ),
+   731→            5.5 * scale,
+   732→            Paint()..color = mane[i],
+   733→          );
+   734→        }
+   735→        // Рог.
+   736→        final Path horn = Path()
+   737→          ..moveTo(bodyC.dx - 4 * scale, bodyC.dy - bh * 0.52)
+   738→          ..lineTo(bodyC.dx + 4 * scale, bodyC.dy - bh * 0.52)
+   739→          ..lineTo(bodyC.dx, bodyC.dy - bh * 0.86)
+   740→          ..close();
+   741→        canvas.drawPath(horn, Paint()..color = const Color(0xFFFFD166));
+   742→        break;
+   743→      case 'shell':
+   744→        // Панцирь черепашки.
+   745→        canvas.drawOval(
+   746→          Rect.fromCenter(
+   747→            center: bodyC - Offset(0, bh * 0.08),
+   748→            width: bw * 0.94,
+   749→            height: bh * 0.78,
+   750→          ),
+   751→          Paint()..color = const Color(0xFF6B9B4E),
+   752→        );
+   753→        canvas.drawOval(
+   754→          Rect.fromCenter(
+   755→            center: bodyC - Offset(0, bh * 0.08),
+   756→            width: bw * 0.55,
+   757→            height: bh * 0.44,
+   758→          ),
+   759→          Paint()..color = const Color(0xFF8FBF6A),
+   760→        );
+   761→        break;
+   762→      case 'mask':
+   763→        // Маска енота — рисуется в _paintFace (под глазами), тут пятна боков.
+   764→        canvas.drawCircle(
+   765→          Offset(bodyC.dx + bw * 0.3, bodyC.dy + bh * 0.3),
+   766→          5 * scale,
+   767→          Paint()..color = Colors.black.withOpacity(0.08),
+   768→        );
+   769→        break;
+   770→      case 'spots':
+   771→        // Пятнышки лисёнка/оленёнка на спине.
+   772→        final Paint spot = Paint()..color = Colors.white.withOpacity(0.35);
+   773→        canvas.drawCircle(Offset(bodyC.dx - bw * 0.26, bodyC.dy - bh * 0.18),
+   774→            3.4 * scale, spot);
+   775→        canvas.drawCircle(Offset(bodyC.dx + bw * 0.1, bodyC.dy - bh * 0.26),
+   776→            2.6 * scale, spot);
+   777→        break;
+   778→      case 'claws':
+   779→        // Клешни крабика — по бокам, над телом.
+   780→        final Paint claw = Paint()..color = body;
+   781→        for (final double sx in <double>[-0.62, 0.62]) {
+   782→          final Offset c = Offset(bodyC.dx + bw * sx, bodyC.dy - bh * 0.1);
+   783→          canvas.drawCircle(c, 8.5 * scale, claw);
+   784→          // «Зев» клешни.
+   785→          canvas.drawArc(
+   786→            Rect.fromCircle(center: c, radius: 8.5 * scale),
+   787→            sx < 0 ? -0.6 : 2.5,
+   788→            1.2,
+   789→            false,
+   790→            Paint()
+   791→              ..color = speciesBelly(type)
+   792→              ..style = PaintingStyle.fill,
+   793→          );
+   794→        }
+   795→        break;
+   796→      case 'tentacles':
+   797→        // Ножки осьминожки — волны под телом.
+   798→        final Paint tent = Paint()..color = body;
+   799→        for (int i = -2; i <= 2; i++) {
+   800→          final Offset c = Offset(bodyC.dx + bw * 0.17 * i, bodyC.dy + bh * 0.52);
+   801→          canvas.drawCircle(c, 5.2 * scale, tent);
+   802→        }
+   803→        break;
+   804→      default:
+   805→        break;
+   806→    }
+   807→  }
+   808→
+   809→  void _paintFace(Canvas canvas, Offset bodyC, double bw, double bh,
+   810→      SpeciesStyle st, PetType type, Color belly, double scale, bool lying) {
+   811→    final double eyeY;
+   812→    final double eyeDX;
+   813→    switch (st.muzzle) {
+   814→      case 'topEyes':
+   815→        // Глаза лягушонка на макушке.
+   816→        eyeY = bodyC.dy - bh * 0.48;
+   817→        eyeDX = bw * 0.2;
+   818→        canvas.drawCircle(Offset(bodyC.dx - eyeDX, eyeY - 2), 8.5 * scale,
+   819→            Paint()..color = Colors.white);
+   820→        canvas.drawCircle(Offset(bodyC.dx + eyeDX, eyeY - 2), 8.5 * scale,
+   821→            Paint()..color = Colors.white);
+   822→        break;
+   823→      default:
+   824→        eyeY = bodyC.dy - bh * 0.05;
+   825→        eyeDX = bw * 0.17;
+   826→        break;
+   827→    }
+   828→
+   829→    final bool eyesClosed = lying || ((phase * 3) % 1.0) < 0.1;
+   830→
+   831→    // Пятна-очки панды и маска енота — под глазами.
+   832→    if (st.extra == 'patches' && !eyesClosed) {
+   833→      final Paint patch = Paint()..color = kInk;
+   834→      canvas.drawOval(
+   835→        Rect.fromCenter(
+   836→            center: Offset(bodyC.dx - eyeDX, eyeY),
+   837→            width: bw * 0.3,
+   838→            height: bh * 0.34),
+   839→        patch,
+   840→      );
+   841→      canvas.drawOval(
+   842→        Rect.fromCenter(
+   843→            center: Offset(bodyC.dx + eyeDX, eyeY),
+   844→            width: bw * 0.3,
+   845→            height: bh * 0.34),
+   846→        patch,
+   847→      );
+   848→    }
+   849→    if (st.extra == 'mask') {
+   850→      final Paint mask = Paint()..color = const Color(0xFF5A5F66);
+   851→      canvas.drawOval(
+   852→        Rect.fromCenter(
+   853→            center: Offset(bodyC.dx - eyeDX, eyeY),
+   854→            width: bw * 0.34,
+   855→            height: bh * 0.3),
+   856→        mask,
+   857→      );
+   858→      canvas.drawOval(
+   859→        Rect.fromCenter(
+   860→            center: Offset(bodyC.dx + eyeDX, eyeY),
+   861→            width: bw * 0.34,
+   862→            height: bh * 0.3),
+   863→        mask,
+   864→      );
+   865→    }
+   866→
+   867→    if (eyesClosed) {
+   868→      final Paint closed = Paint()
+   869→        ..color = const Color(0xFF4A3B2A)
+   870→        ..style = PaintingStyle.stroke
+   871→        ..strokeWidth = 2.4
+   872→        ..strokeCap = StrokeCap.round;
+   873→      canvas.drawLine(Offset(bodyC.dx - eyeDX, eyeY),
+   874→          Offset(bodyC.dx - eyeDX + 7 * scale, eyeY), closed);
+   875→      canvas.drawLine(Offset(bodyC.dx + eyeDX - 7 * scale, eyeY),
+   876→          Offset(bodyC.dx + eyeDX, eyeY), closed);
+   877→    } else {
+   878→      final Paint white = Paint()..color = Colors.white;
+   879→      final Paint pupil = Paint()..color = const Color(0xFF33261A);
+   880→      canvas.drawCircle(Offset(bodyC.dx - eyeDX, eyeY), 6.5 * scale, white);
+   881→      canvas.drawCircle(Offset(bodyC.dx + eyeDX, eyeY), 6.5 * scale, white);
+   882→      canvas.drawCircle(Offset(bodyC.dx - eyeDX + 1.5, eyeY + 1), 3.2 * scale,
+   883→          pupil);
+   884→      canvas.drawCircle(Offset(bodyC.dx + eyeDX + 1.5, eyeY + 1), 3.2 * scale,
+   885→          pupil);
+   886→      canvas.drawCircle(Offset(bodyC.dx - eyeDX + 2.5, eyeY - 1.5),
+   887→          1.1 * scale, white);
+   888→      canvas.drawCircle(Offset(bodyC.dx + eyeDX + 2.5, eyeY - 1.5),
+   889→          1.1 * scale, white);
+   890→    }
+   891→
+   892→    // Румянец
+   893→    final Paint blush = Paint()
+   894→      ..color = const Color(0xFFFF8FA3).withOpacity(0.55);
+   895→    canvas.drawCircle(Offset(bodyC.dx - bw * 0.28, bodyC.dy + bh * 0.05),
+   896→        4.5 * scale, blush);
+   897→    canvas.drawCircle(Offset(bodyC.dx + bw * 0.28, bodyC.dy + bh * 0.05),
+   898→        4.5 * scale, blush);
+   899→
+   900→    // Клювы, мордочки, улыбки
+   901→    switch (st.muzzle) {
+   902→      case 'beak':
+   903→        canvas.drawPath(
+   904→          Path()
+   905→            ..moveTo(bodyC.dx - 4 * scale, bodyC.dy + bh * 0.06)
+   906→            ..lineTo(bodyC.dx + 4 * scale, bodyC.dy + bh * 0.06)
+   907→            ..lineTo(bodyC.dx, bodyC.dy + bh * 0.06 + 7 * scale)
+   908→            ..close(),
+   909→          Paint()..color = const Color(0xFFFFB703),
+   910→        );
+   911→        break;
+   912→      case 'duckBeak':
+   913→        canvas.drawRRect(
+   914→          RRect.fromRectAndRadius(
+   915→            Rect.fromCenter(
+   916→              center: Offset(bodyC.dx, bodyC.dy + bh * 0.1),
+   917→              width: bw * 0.36,
+   918→              height: bh * 0.16,
+   919→            ),
+   920→            Radius.circular(4 * scale),
+   921→          ),
+   922→          Paint()..color = kBeakOrange,
+   923→        );
+   924→        break;
+   925→      case 'bearMuzzle':
+   926→        canvas.drawOval(
+   927→          Rect.fromCenter(
+   928→            center: Offset(bodyC.dx, bodyC.dy + bh * 0.16),
+   929→            width: bw * 0.4,
+   930→            height: bh * 0.3,
+   931→          ),
+   932→          Paint()..color = belly,
+   933→        );
+   934→        canvas.drawCircle(Offset(bodyC.dx, bodyC.dy + bh * 0.1), 3.2 * scale,
+   935→            Paint()..color = kInk);
+   936→        final Paint mouth = Paint()
+   937→          ..color = kInk
+   938→          ..style = PaintingStyle.stroke
+   939→          ..strokeWidth = 2.2
+   940→          ..strokeCap = StrokeCap.round;
+   941→        canvas.drawArc(
+   942→          Rect.fromCenter(
+   943→            center: Offset(bodyC.dx, bodyC.dy + bh * 0.2),
+   944→            width: 12 * scale,
+   945→            height: 8 * scale,
+   946→          ),
+   947→          0.3,
+   948→          2.5,
+   949→          false,
+   950→          mouth,
+   951→        );
+   952→        break;
+   953→      case 'snout':
+   954→        // Пятачок поросёнка.
+   955→        canvas.drawOval(
+   956→          Rect.fromCenter(
+   957→            center: Offset(bodyC.dx, bodyC.dy + bh * 0.14),
+   958→            width: bw * 0.26,
+   959→            height: bh * 0.2,
+   960→          ),
+   961→          Paint()..color = const Color(0xFFE88AA0),
+   962→        );
+   963→        canvas.drawCircle(
+   964→            Offset(bodyC.dx - 3.2 * scale, bodyC.dy + bh * 0.14),
+   965→            1.7 * scale,
+   966→            Paint()..color = kInk);
+   967→        canvas.drawCircle(
+   968→            Offset(bodyC.dx + 3.2 * scale, bodyC.dy + bh * 0.14),
+   969→            1.7 * scale,
+   970→            Paint()..color = kInk);
+   971→        break;
+   972→      case 'buckteeth':
+   973→        final Paint mouth = Paint()
+   974→          ..color = const Color(0xFF4A3B2A)
+   975→          ..style = PaintingStyle.stroke
+   976→          ..strokeWidth = 2.2
+   977→          ..strokeCap = StrokeCap.round;
+   978→        canvas.drawArc(
+   979→          Rect.fromCenter(
+   980→            center: Offset(bodyC.dx, bodyC.dy + bh * 0.08),
+   981→            width: 14 * scale,
+   982→            height: 10 * scale,
+   983→          ),
+   984→          0.3,
+   985→          2.5,
+   986→          false,
+   987→          mouth,
+   988→        );
+   989→        // Два зубика.
+   990→        canvas.drawRRect(
+   991→          RRect.fromRectAndRadius(
+   992→            Rect.fromLTWH(bodyC.dx - 4 * scale, bodyC.dy + bh * 0.13,
+   993→                3.4 * scale, 4.6 * scale),
+   994→            const Radius.circular(1.6),
+   995→          ),
+   996→          Paint()..color = Colors.white,
+   997→        );
+   998→        canvas.drawRRect(
+   999→          RRect.fromRectAndRadius(
+  1000→            Rect.fromLTWH(bodyC.dx + 0.8 * scale, bodyC.dy + bh * 0.13,
+  1001→                3.4 * scale, 4.6 * scale),
+  1002→            const Radius.circular(1.6),
+  1003→          ),
+  1004→          Paint()..color = Colors.white,
+  1005→        );
+  1006→        break;
+  1007→      case 'whaleMouth':
+  1008→        // Большая добрая улыбка кита + фонтанчик.
+  1009→        final Paint mouth = Paint()
+  1010→          ..color = const Color(0xFF3E6E8E)
+  1011→          ..style = PaintingStyle.stroke
+  1012→          ..strokeWidth = 3
+  1013→          ..strokeCap = StrokeCap.round;
+  1014→        canvas.drawArc(
+  1015→          Rect.fromCenter(
+  1016→            center: Offset(bodyC.dx, bodyC.dy + bh * 0.05),
+  1017→            width: bw * 0.5,
+  1018→            height: bh * 0.5,
+  1019→          ),
+  1020→          0.4,
+  1021→          2.3,
+  1022→          false,
+  1023→          mouth,
+  1024→        );
+  1025→        break;
+  1026→      case 'topEyes':
+  1027→        final Paint pupil = Paint()..color = const Color(0xFF33261A);
+  1028→        canvas.drawCircle(Offset(bodyC.dx - bw * 0.2, eyeY - 2), 3.6 * scale,
+  1029→            pupil);
+  1030→        canvas.drawCircle(Offset(bodyC.dx + bw * 0.2, eyeY - 2), 3.6 * scale,
+  1031→            pupil);
+  1032→        final Paint smile = Paint()
+  1033→          ..color = const Color(0xFF4A3B2A)
+  1034→          ..style = PaintingStyle.stroke
+  1035→          ..strokeWidth = 2.4
+  1036→          ..strokeCap = StrokeCap.round;
+  1037→        canvas.drawArc(
+  1038→          Rect.fromCenter(
+  1039→            center: Offset(bodyC.dx, bodyC.dy + bh * 0.12),
+  1040→            width: bw * 0.4,
+  1041→            height: bh * 0.3,
+  1042→          ),
+  1043→          0.35,
+  1044→          2.4,
+  1045→          false,
+  1046→          smile,
+  1047→        );
+  1048→        break;
+  1049→      default:
+  1050→        final Paint mouth = Paint()
+  1051→          ..color = const Color(0xFF4A3B2A)
+  1052→          ..style = PaintingStyle.stroke
+  1053→          ..strokeWidth = 2.2
+  1054→          ..strokeCap = StrokeCap.round;
+  1055→        canvas.drawArc(
+  1056→          Rect.fromCenter(
+  1057→            center: Offset(bodyC.dx, bodyC.dy + bh * 0.08),
+  1058→            width: 14 * scale,
+  1059→            height: 10 * scale,
+  1060→          ),
+  1061→          0.3,
+  1062→          2.5,
+  1063→          false,
+  1064→          mouth,
+  1065→        );
+  1066→        break;
+  1067→    }
+  1068→
+  1069→    // Усики тюленя.
+  1070→    if (type == PetType.seal) {
+  1071→      final Paint whisk = Paint()
+  1072→        ..color = const Color(0xFF7A8896)
+  1073→        ..strokeWidth = 1.6
+  1074→        ..strokeCap = StrokeCap.round;
+  1075→      for (final double sx in <double>[-1, 1]) {
+  1076→        canvas.drawLine(
+  1077→          Offset(bodyC.dx + sx * bw * 0.1, bodyC.dy + bh * 0.1),
+  1078→          Offset(bodyC.dx + sx * bw * 0.3, bodyC.dy + bh * 0.06),
+  1079→          whisk,
+  1080→        );
+  1081→        canvas.drawLine(
+  1082→          Offset(bodyC.dx + sx * bw * 0.1, bodyC.dy + bh * 0.12),
+  1083→          Offset(bodyC.dx + sx * bw * 0.3, bodyC.dy + bh * 0.14),
+  1084→          whisk,
+  1085→        );
+  1086→      }
+  1087→    }
+  1088→  }
+  1089→
+  1090→  // ── Растения ─────────────────────────────────────────────────────────
+  1091→  void _paintPlant(Canvas canvas, Offset base, Pet pet) {
+  1092→    final SpeciesStyle st =
+  1093→        kSpeciesStyles[pet.type] ?? kSpeciesStyles[PetType.cactus]!;
+  1094→    final double scale = 0.55 + pet.stage * 0.22;
+  1095→    final Color body = st.body;
+  1096→
+  1097→    // Горшочек с грунтом.
+  1098→    final Path pot = Path()
+  1099→      ..moveTo(-15 * scale, -26 * scale)
+  1100→      ..lineTo(15 * scale, -26 * scale)
+  1101→      ..lineTo(11 * scale, 0)
+  1102→      ..lineTo(-11 * scale, 0)
+  1103→      ..close();
+  1104→    canvas.save();
+  1105→    canvas.translate(base.dx, base.dy);
+  1106→    canvas.drawPath(pot, Paint()..color = kPot);
+  1107→    canvas.drawRect(
+  1108→      Rect.fromLTWH(-16 * scale, -29 * scale, 32 * scale, 5 * scale),
+  1109→      Paint()..color = kPotDark,
+  1110→    );
+  1111→    canvas.drawRect(
+  1112→      Rect.fromLTWH(-12.5 * scale, -26 * scale, 25 * scale, 4 * scale),
+  1113→      Paint()..color = kSoil,
+  1114→    );
+  1115→
+  1116→    final double topY = -30 * scale;
+  1117→    switch (pet.type) {
+  1118→      case PetType.cactus:
+  1119→        // Столбик кактуса с ручками и колючками.
+  1120→        canvas.drawRRect(
+  1121→          RRect.fromRectAndRadius(
+  1122→            Rect.fromCenter(
+  1123→                center: Offset(0, topY - 14 * scale),
+  1124→                width: 14 * scale,
+  1125→                height: 30 * scale),
+  1126→            Radius.circular(7 * scale),
+  1127→          ),
+  1128→          Paint()..color = body,
+  1129→        );
+  1130→        canvas.drawRRect(
+  1131→          RRect.fromRectAndRadius(
+  1132→            Rect.fromLTWH(-19 * scale, topY - 22 * scale, 8 * scale,
+  1133→                14 * scale),
+  1134→            Radius.circular(4 * scale),
+  1135→          ),
+  1136→          Paint()..color = body,
+  1137→        );
+  1138→        canvas.drawRRect(
+  1139→          RRect.fromRectAndRadius(
+  1140→            Rect.fromLTWH(
+  1141→                11 * scale, topY - 26 * scale, 8 * scale, 16 * scale),
+  1142→            Radius.circular(4 * scale),
+  1143→          ),
+  1144→          Paint()..color = body,
+  1145→        );
+  1146→        final Paint needle = Paint()..color = Colors.white.withOpacity(0.85);
+  1147→        for (int i = 0; i < 6; i++) {
+  1148→          canvas.drawCircle(
+  1149→            Offset(
+  1150→              ((i * 13) % 12 - 6).toDouble() * scale,
+  1151→              topY - 6 * scale - i * 4.4 * scale,
+  1152→            ),
+  1153→            1.1 * scale,
+  1154→            needle,
+  1155→          );
+  1156→        }
+  1157→        // Цветочек на макушке у взрослого.
+  1158→        if (pet.stage >= 2) {
+  1159→          canvas.drawCircle(Offset(0, topY - 30 * scale), 4 * scale,
+  1160→              Paint()..color = const Color(0xFFFF8FB1));
+  1161→          canvas.drawCircle(Offset(0, topY - 30 * scale), 1.6 * scale,
+  1162→              Paint()..color = Colors.white);
+  1163→        }
+  1164→        break;
+  1165→      case PetType.bonsai:
+  1166→        // Изогнутый ствол и крона из трёх шаров.
+  1167→        final Paint trunk = Paint()
+  1168→          ..color = kSpike
+  1169→          ..strokeWidth = 4.6 * scale
+  1170→          ..strokeCap = StrokeCap.round;
+  1171→        canvas.drawPath(
+  1172→          Path()
+  1173→            ..moveTo(0, -26 * scale)
+  1174→            ..quadraticBezierTo(6 * scale, topY + 12 * scale,
+  1175→                -3 * scale, topY + 2 * scale),
+  1176→          trunk,
+  1177→        );
+  1178→        canvas.drawCircle(Offset(-4 * scale, topY - 4 * scale), 9 * scale,
+  1179→            Paint()..color = body);
+  1180→        canvas.drawCircle(Offset(6 * scale, topY - 8 * scale), 7.4 * scale,
+  1181→            Paint()..color = body.withOpacity(0.9));
+  1182→        canvas.drawCircle(Offset(0, topY - 13 * scale), 6 * scale,
+  1183→            Paint()..color = body.withOpacity(0.8));
+  1184→        break;
+  1185→      case PetType.succulent:
+  1186→        // Розетка: листья-лепестки по кругу.
+  1187→        for (int i = 0; i < 6; i++) {
+  1188→          final double a = -math.pi + i * math.pi / 5;
+  1189→          canvas.save();
+  1190→          canvas.translate(0, topY - 3 * scale);
+  1191→          canvas.rotate(a + math.pi / 2);
+  1192→          canvas.drawOval(
+  1193→            Rect.fromCenter(
+  1194→              center: Offset(0, -6.2 * scale),
+  1195→              width: 5.4 * scale,
+  1196→              height: 11 * scale,
+  1197→            ),
+  1198→            Paint()
+  1199→              ..color = i.isEven
+  1200→                  ? body
+  1201→                  : Color.alphaBlend(body.withOpacity(0.82), Colors.white),
+  1202→          );
+  1203→          canvas.restore();
+  1204→        }
+  1205→        canvas.drawCircle(
+  1206→            Offset(0, topY - 3 * scale),
+  1207→            4.2 * scale,
+  1208→            Paint()
+  1209→              ..color =
+  1210→                  Color.alphaBlend(body.withOpacity(0.7), Colors.white));
+  1211→        break;
+  1212→      case PetType.sunflower:
+  1213→        // Стебель, два листика и цветок с лицом.
+  1214→        canvas.drawRect(
+  1215→          Rect.fromLTWH(-1.8 * scale, topY, 3.6 * scale, 14 * scale),
+  1216→          Paint()..color = kStem,
+  1217→        );
+  1218→        canvas.drawOval(
+  1219→          Rect.fromCenter(
+  1220→              center: Offset(-7 * scale, topY + 7 * scale),
+  1221→              width: 9 * scale,
+  1222→              height: 4.4 * scale),
+  1223→          Paint()..color = kStem,
+  1224→        );
+  1225→        canvas.drawOval(
+  1226→          Rect.fromCenter(
+  1227→              center: Offset(7 * scale, topY + 10 * scale),
+  1228→              width: 9 * scale,
+  1229→              height: 4.4 * scale),
+  1230→          Paint()..color = kStem,
+  1231→        );
+  1232→        final Offset fc = Offset(0, topY - 6 * scale);
+  1233→        for (int i = 0; i < 8; i++) {
+  1234→          final double a = i * math.pi / 4;
+  1235→          canvas.drawOval(
+  1236→            Rect.fromCenter(
+  1237→              center: fc + Offset(math.cos(a) * 9 * scale, math.sin(a) * 9 * scale),
+  1238→              width: 8 * scale,
+  1239→              height: 5 * scale,
+  1240→            ),
+  1241→            Paint()..color = body,
+  1242→          );
+  1243→        }
+  1244→        canvas.drawCircle(fc, 6.4 * scale, Paint()..color = kSoil);
+  1245→        // Глазки и улыбка подсолнуха.
+  1246→        if (pet.stage >= 1) {
+  1247→          canvas.drawCircle(Offset(fc.dx - 2.4 * scale, fc.dy - 1), 1.3 * scale,
+  1248→              Paint()..color = Colors.white);
+  1249→          canvas.drawCircle(Offset(fc.dx + 2.4 * scale, fc.dy - 1), 1.3 * scale,
+  1250→              Paint()..color = Colors.white);
+  1251→        }
+  1252→        break;
+  1253→      case PetType.clover:
+  1254→        // Три сердечка-листа на черешках.
+  1255→        for (final double sx in <double>[-7, 0, 7]) {
+  1256→          canvas.save();
+  1257→          canvas.translate(sx * scale, topY - 2 * scale);
+  1258→          canvas.rotate(sx * 0.035);
+  1259→          canvas.drawCircle(Offset(0, -3.4 * scale), 4.6 * scale,
+  1260→              Paint()..color = body);
+  1261→          canvas.drawCircle(Offset(0, 3.4 * scale), 4.6 * scale,
+  1262→              Paint()..color = body.withOpacity(0.85));
+  1263→          canvas.restore();
+  1264→        }
+  1265→        if (pet.stage >= 2) {
+  1266→          canvas.drawCircle(Offset(0, topY - 14 * scale), 2.6 * scale,
+  1267→              Paint()..color = const Color(0xFFFFD166));
+  1268→        }
+  1269→        break;
+  1270→      default:
+  1271→        // sprout — символ «Ростка»: стебелёк и два листика.
+  1272→        canvas.drawRect(
+  1273→          Rect.fromLTWH(-1.6 * scale, topY + 4 * scale, 3.2 * scale,
+  1274→              12 * scale),
+  1275→          Paint()..color = kStem,
+  1276→        );
+  1277→        final Path leafL = Path()
+  1278→          ..moveTo(0, topY + 5 * scale)
+  1279→          ..quadraticBezierTo(-13 * scale, topY + 2 * scale,
+  1280→              -11 * scale, topY - 7 * scale)
+  1281→          ..quadraticBezierTo(-3 * scale, topY - 4 * scale, 0, topY + 5 * scale)
+  1282→          ..close();
+  1283→        final Path leafR = Path()
+  1284→          ..moveTo(0, topY + 5 * scale)
+  1285→          ..quadraticBezierTo(13 * scale, topY + 2 * scale, 11 * scale,
+  1286→              topY - 7 * scale)
+  1287→          ..quadraticBezierTo(3 * scale, topY - 4 * scale, 0, topY + 5 * scale)
+  1288→          ..close();
+  1289→        canvas.drawPath(leafL, Paint()..color = body);
+  1290→        canvas.drawPath(leafR, Paint()..color = body.withOpacity(0.88));
+  1291→        break;
+  1292→    }
+  1293→
+  1294→    canvas.restore();
+  1295→
+  1296→    if (sleeping) {
+  1297→      _paintZzz(canvas, Offset(base.dx + 18 * scale, base.dy - 44 * scale), scale);
+  1298→    }
+  1299→  }
+  1300→
+  1301→  // ── Яйцо и zzz ───────────────────────────────────────────────────────
+  1302→  void _paintEgg(Canvas canvas, Offset base, Color spotColor, double progress) {
+  1303→    final double eggS = 0.95 + 0.45 * progress;
+  1304→    final double w = 34 * eggS;
+  1305→    final double h = 44 * eggS;
+  1306→    final double wobble =
+  1307→        math.sin(phase * 2 * math.pi * 1.6) * 0.06 * (0.35 + progress);
+  1308→
+  1309→    canvas.save();
+  1310→    canvas.translate(base.dx, base.dy);
+  1311→    canvas.rotate(wobble);
+  1312→
+  1313→    final Rect r =
+  1314→        Rect.fromCenter(center: Offset(0, -h / 2), width: w, height: h);
+  1315→    canvas.drawOval(r, Paint()..color = const Color(0xFFFFF6E3));
+  1316→    canvas.drawOval(
+  1317→        r.deflate(w * 0.12), Paint()..color = const Color(0xFFFFFBF0));
+  1318→
+  1319→    final Paint spots = Paint()..color = spotColor.withOpacity(0.65);
+  1320→    canvas.drawCircle(Offset(-w * 0.18, -h * 0.55), 3.5 * eggS, spots);
+  1321→    canvas.drawCircle(Offset(w * 0.15, -h * 0.35), 2.6 * eggS, spots);
+  1322→    canvas.drawCircle(Offset(-w * 0.05, -h * 0.75), 2.0 * eggS, spots);
+  1323→
+  1324→    final Paint crack = Paint()
+  1325→      ..color = const Color(0xFFC9A96E)
+  1326→      ..style = PaintingStyle.stroke
+  1327→      ..strokeWidth = 2.2
+  1328→      ..strokeCap = StrokeCap.round
+  1329→      ..strokeJoin = StrokeJoin.round;
+  1330→    if (progress > 0.45) {
+  1331→      canvas.drawPath(
+  1332→        Path()
+  1333→          ..moveTo(0, -h * 0.78)
+  1334→          ..lineTo(w * 0.14, -h * 0.66)
+  1335→          ..lineTo(-w * 0.07, -h * 0.54)
+  1336→          ..lineTo(w * 0.1, -h * 0.44),
+  1337→        crack,
+  1338→      );
+  1339→    }
+  1340→    if (progress > 0.75) {
+  1341→      canvas.drawPath(
+  1342→        Path()
+  1343→          ..moveTo(-w * 0.05, -h * 0.52)
+  1344→          ..lineTo(-w * 0.2, -h * 0.4)
+  1345→          ..lineTo(w * 0.02, -h * 0.28),
+  1346→        crack,
+  1347→      );
+  1348→    }
+  1349→
+  1350→    canvas.restore();
+  1351→  }
+  1352→
+  1353→  void _paintZzz(Canvas canvas, Offset origin, double scale) {
+  1354→    final List<String> zs = <String>['z', 'z', 'Z'];
+  1355→    for (int i = 0; i < zs.length; i++) {
+  1356→      final TextPainter tp = TextPainter(
+  1357→        text: TextSpan(
+  1358→          text: zs[i],
+  1359→          style: TextStyle(
+  1360→            color: const Color(0xFF6B7B8C).withOpacity(0.9 - i * 0.2),
+  1361→            fontSize: (11 + i * 3) * scale,
+  1362→            fontWeight: FontWeight.w800,
+  1363→          ),
+  1364→        ),
+  1365→        textDirection: TextDirection.ltr,
+  1366→      )..layout();
+  1367→      tp.paint(canvas, origin + Offset(i * 9 * scale, -i * 10 * scale));
+  1368→    }
+  1369→  }
+  1370→
+  1371→  @override
+  1372→  bool shouldRepaint(_PetScenePainter oldDelegate) =>
+  1373→      oldDelegate.phase != phase ||
+  1374→      oldDelegate.pets.length != pets.length ||
+  1375→      oldDelegate.sleeping != sleeping ||
+  1376→      oldDelegate.weather != weather ||
+  1377→      oldDelegate.frame != frame;
+  1378→}
+  1379→

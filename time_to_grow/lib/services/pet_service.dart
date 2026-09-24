@@ -22,11 +22,15 @@ class PetService extends ChangeNotifier {
   int weekMinutes = 0;
 
   /// Монетки (v1.5.0): капают за сессии, кормление и задания.
-  /// Тратятся в магазине на рамки, еду и заморозку серии 🧊 (v1.7.0).
+  /// Тратятся в магазине на рамки, еду, заморозку 🧊 и гардероб (v1.9.0).
   int coins = 0;
 
   /// Заморозки серии 🧊 (v1.7.0): спасают streak при пропуске дня.
   int freezes = 0;
+
+  /// Купленные предметы гардероба (v1.9.0): id аксессуаров и окрасов.
+  /// Общий шкаф игрока; надеваются на конкретного питомца.
+  final List<String> wardrobe = <String>[];
 
   String _todayKey = '';
   String _lastSessionDayKey = '';
@@ -45,6 +49,8 @@ class PetService extends ChangeNotifier {
   static const String _kWeekKey = 'stats_week_key';
   static const String _kCoins = 'economy_coins';
   static const String _kFreezes = 'economy_freezes';
+  static const String _kWardrobe = 'economy_wardrobe';
+  static const String _kGrowthMigrate = 'migrate_growth_v19';
 
   /// Цена заморозки серии в магазине (v1.7.0).
   static const int kFreezePrice = 200;
@@ -81,10 +87,15 @@ class PetService extends ChangeNotifier {
     weekMinutes = _storage.getInt(_kWeekMinutes);
     coins = _storage.getInt(_kCoins);
     freezes = _storage.getInt(_kFreezes);
+    final String wardrobeRaw = _storage.getString(_kWardrobe);
+    wardrobe
+      ..clear()
+      ..addAll(_storage.decodeJsonList(wardrobeRaw));
     _todayKey = _storage.getString(_kTodayKey);
     _lastSessionDayKey = _storage.getString(_kLastDay);
     _weekKey = _storage.getString(_kWeekKey);
 
+    _migrateGrowthV19();
     _rollDateCounters();
     // С v1.1.0 первого питомца НЕ создаём автоматически:
     // при пустой коллекции приложение показывает большой экран
@@ -112,6 +123,18 @@ class PetService extends ChangeNotifier {
     }
   }
 
+  /// v1.9.0: рост замедлен в 20 раз (пороги [0,5,15,30] → [0,100,300,600]).
+  /// Разовая миграция: умножаем накопленные минуты, чтобы питомцы,
+  /// выросшие по старым правилам, не «помолодели» назад.
+  void _migrateGrowthV19() {
+    if (_storage.getBool(_kGrowthMigrate)) return;
+    for (final Pet p in pets) {
+      if (p.growthMinutes > 0) p.growthMinutes *= 20;
+    }
+    _storage.setBool(_kGrowthMigrate, true);
+    _persistPets();
+  }
+
   Pet _createEgg() {
     final PetSpecies species = kPetCatalog[pets.length % kPetCatalog.length];
     return Pet(
@@ -124,6 +147,7 @@ class PetService extends ChangeNotifier {
 
   /// Создать питомца выбранного вида — результат большого экрана выбора.
   /// Первый питомец (коллекция пуста) или новый — когда предыдущий вырос.
+  /// Растения (v1.9.0) не вылупляются из яйца — их САЖАЮТ семечком.
   Pet? createPet(PetType type) {
     if (activePet != null) return null;
     final PetSpecies species = speciesOfType(type);
@@ -132,6 +156,7 @@ class PetService extends ChangeNotifier {
       name: species.name,
       type: species.type,
       bornAt: DateTime.now().millisecondsSinceEpoch,
+      fromSeed: kPlantPets.contains(type),
     );
     pets.add(pet);
     _persistPets();
@@ -242,6 +267,55 @@ class PetService extends ChangeNotifier {
     return true;
   }
 
+  // ── Гардероб (v1.9.0) ──
+
+  /// Купить предмет гардероба (аксессуар или окрас). false — если уже
+  /// куплен или не хватает монеток.
+  bool buyWardrobeItem(String itemId, int price) {
+    if (wardrobe.contains(itemId)) return true;
+    if (!spendCoins(price)) return false;
+    wardrobe.add(itemId);
+    _storage.setString(_kWardrobe, _storage.encodeJson(wardrobe));
+    notifyListeners();
+    return true;
+  }
+
+  /// Надеть/снять предмет на питомца. Слот: hat|neck|face|skin.
+  void equipItem(Pet pet, String slot, String itemId) {
+    switch (slot) {
+      case 'hat':
+        pet.hat = pet.hat == itemId ? 'none' : itemId;
+        break;
+      case 'neck':
+        pet.neck = pet.neck == itemId ? 'none' : itemId;
+        break;
+      case 'face':
+        pet.face = pet.face == itemId ? 'none' : itemId;
+        break;
+      case 'skin':
+        pet.skin = pet.skin == itemId ? 'classic' : itemId;
+        break;
+    }
+    _persistPets();
+    notifyListeners();
+  }
+
+  /// Забрать возрастной подарок питомца (v1.9.0). Возвращает размер
+  /// подарка или 0, если он недоступен.
+  int claimAgeBonus(Pet pet, int day) {
+    if (!Pet.ageBonuses.containsKey(day)) return 0;
+    if (pet.claimedAges.contains(day)) return 0;
+    if (pet.ageDays() < day) return 0;
+    final int reward = Pet.ageBonuses[day]!;
+    pet.claimedAges.add(day);
+    coins += reward;
+    _storage.setInt(_kCoins, coins);
+    pet.xp += reward;
+    _persistPets();
+    notifyListeners();
+    return reward;
+  }
+
   /// Купить заморозку серии 🧊 (v1.7.0) — максимум 2 в запасе.
   bool buyFreeze() {
     if (freezes >= 2) return false;
@@ -267,6 +341,8 @@ class PetService extends ChangeNotifier {
     weekMinutes = 0;
     coins = 0;
     freezes = 0;
+    wardrobe.clear();
+    _storage.setString(_kWardrobe, _storage.encodeJson(wardrobe));
     lastEvolvedPetName = null;
     _lastSessionDayKey = '';
     _storage.setInt(_kTotal, 0);

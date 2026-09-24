@@ -4,6 +4,56 @@ import { C } from "@/lib/ttg/types";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 
+/** Рисованая монетка (v1.9.0) — вместо эмодзи 🪙, который на части
+ *  устройств Android отображается пустым квадратом. */
+export function Coin({ size = 18, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className={className}>
+      <circle cx="10" cy="10" r="10" fill="#E0A800" />
+      <circle cx="10" cy="9.4" r="9.2" fill="#FFC800" />
+      <circle cx="10" cy="9.4" r="6.2" fill="#FFDD55" />
+      <polygon
+        points="10,5.5 10.97,8.06 13.71,8.19 11.57,9.91 12.29,12.56 10,11.05 7.71,12.56 8.43,9.91 6.29,8.19 9.03,8.06"
+        fill="#E0A800"
+      />
+    </svg>
+  );
+}
+
+/** «N [монетка]» — сумма с рисованой монеткой. */
+export function CoinText({
+  amount,
+  textSize = 14,
+  className = "",
+  color,
+}: {
+  amount: number;
+  textSize?: number;
+  className?: string;
+  color?: string;
+}) {
+  return (
+    <span className={`inline-flex items-center gap-1 ${className}`}>
+      <span className="font-extrabold" style={{ fontSize: textSize, color }}>
+        {amount}
+      </span>
+      <Coin size={textSize * 0.95} />
+    </span>
+  );
+}
+
+/** Белый чип с монеткой для шапки главного экрана. */
+export function CoinChip({ amount }: { amount: number }) {
+  return (
+    <div className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-white bg-white/[0.85] px-2.5 py-1.5">
+      <Coin size={15} />
+      <span className="text-[12.5px] font-bold" style={{ color: C.ink }}>
+        {amount}
+      </span>
+    </div>
+  );
+}
+
 /** Карточка в игровом стиле: белый фон, рамка 2px, крупные скругления. */
 export function InfoCard({
   children,

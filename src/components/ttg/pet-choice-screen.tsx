@@ -17,7 +17,7 @@ import type { Pet, PetType } from "@/lib/ttg/types";
 import { PetScene } from "./scene";
 import { BigButton } from "./widgets";
 
-/** Превью-питомец стадии «Малыш» — показывает, кем станет яйцо. */
+/** Превью-питомец стадии «Малыш» — показывает, кем станет яйцо/семечко. */
 function previewPet(type: PetType): Pet {
   const species = PET_CATALOG.find((s) => s.type === type) ?? PET_CATALOG[0];
   return {
@@ -28,6 +28,11 @@ function previewPet(type: PetType): Pet {
     growthMinutes: STAGE_THRESHOLDS[1],
     xp: 0,
     frame: "none",
+    fromSeed: isPlant(type),
+    hat: "none",
+    neck: "none",
+    face: "none",
+    skin: "classic",
   };
 }
 
@@ -77,7 +82,8 @@ export function PetChoiceScreen() {
           className="mt-1 text-[13.5px] font-semibold"
           style={{ color: C.inkSoft }}
         >
-          Он вырастет, пока вы отдыхаете от телефона. Всего видов:{" "}
+          Звери вылупляются из яйца, растения растим из семечка. Питомец
+          растёт, пока вы отдыхаете от телефона. Всего видов:{" "}
           {PET_CATALOG.length}
         </p>
       </div>
@@ -153,7 +159,9 @@ export function PetChoiceScreen() {
         <BigButton
           label={
             selectedSpecies
-              ? `Встречаем «${selectedSpecies.accusative}»!`
+              ? isPlant(selectedSpecies.type)
+                ? `Сажаем семечко «${selectedSpecies.accusative}»!`
+                : `Встречаем «${selectedSpecies.accusative}»!`
               : "Выберите питомца"
           }
           fullWidth

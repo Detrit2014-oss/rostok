@@ -58,7 +58,7 @@ class Achievement {
     Achievement('zoo_10', '🎪', 'Зоопарк',
         'Десять разных видов в коллекции', (AchievementStats s) => s.uniqueSpecies >= 10),
     // Экономика
-    Achievement('rich_100', '🪙', 'Первая сотня',
+    Achievement('rich_100', '💰', 'Первая сотня',
         'Накопить 100 монет', (AchievementStats s) => s.coins >= 100),
     Achievement('rich_500', '💰', 'Капиталец',
         'Накопить 500 монет', (AchievementStats s) => s.coins >= 500),

@@ -30,4 +30,18 @@ class StorageService {
   String encodeJson(Object? value) => jsonEncode(value);
 
   dynamic decodeJson(String raw) => jsonDecode(raw);
+
+  /// Безопасный разбор строкового JSON-списка (например, гардероб).
+  List<String> decodeJsonList(String raw) {
+    if (raw.isEmpty) return <String>[];
+    try {
+      final dynamic decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.whereType<String>().toList();
+      }
+    } catch (_) {
+      // Повреждённые данные игнорируем.
+    }
+    return <String>[];
+  }
 }

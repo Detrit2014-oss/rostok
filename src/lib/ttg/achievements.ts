@@ -28,7 +28,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "plants_lover", emoji: "🪴", title: "Садовник", desc: "Завести комнатное растение" },
   { id: "sea_lover", emoji: "🌊", title: "Морская душа", desc: "Завести водного питомца" },
   { id: "zoo_10", emoji: "🎪", title: "Зоопарк", desc: "Десять разных видов в коллекции" },
-  { id: "rich_100", emoji: "🪙", title: "Первая сотня", desc: "Накопить 100 монет" },
+  { id: "rich_100", emoji: "💰", title: "Первая сотня", desc: "Накопить 100 монет" },
   { id: "rich_500", emoji: "💰", title: "Капиталец", desc: "Накопить 500 монет" },
   { id: "shopper", emoji: "🛍️", title: "Модный питомец", desc: "Купить рамку в магазине" },
   { id: "level_5", emoji: "🎖️", title: "Пятый уровень", desc: "Прокачать питомца до 5 уровня" },

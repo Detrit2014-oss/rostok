@@ -1,7 +1,7 @@
 name: time_to_grow
 description: "Росток — цифровая гигиена и ментальное здоровье: питомец растёт, пока телефон отдыхает."
 publish_to: 'none'
-version: 1.8.0+9
+version: 1.9.0+10
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

@@ -88,7 +88,7 @@ export const POSTCARDS: Postcard[] = [
   { id: "pc_streak7", emoji: "⚡", title: "Неделя огня", howTo: "Серия из 7 дней" },
   { id: "pc_300", emoji: "🌿", title: "Пять часов", howTo: "300 минут детокса всего" },
   { id: "pc_adult", emoji: "🦊", title: "Совсем большой", howTo: "Вырастите взрослого питомца" },
-  { id: "pc_coins", emoji: "🪙", title: "Запасливый", howTo: "Накопите 500 монеток" },
+  { id: "pc_coins", emoji: "💰", title: "Запасливый", howTo: "Накопите 500 монеток" },
   { id: "pc_quests5", emoji: "📋", title: "Исполнитель", howTo: "Выполните 5 заданий" },
   { id: "pc_quests15", emoji: "🏆", title: "Мастер пауз", howTo: "Выполните 15 заданий" },
   { id: "pc_diary10", emoji: "📓", title: "Летописец", howTo: "10 записей в дневнике" },

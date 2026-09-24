@@ -2,6 +2,99 @@ import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
 
+/// Рисованая монетка (v1.9.0) — замена эмодзи 🪙, который на части
+/// устройств Android отображается пустым квадратом (нет Emoji 13.1).
+class CoinIcon extends StatelessWidget {
+  const CoinIcon({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _CoinPainter(),
+    );
+  }
+}
+
+class _CoinPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double r = size.width / 2;
+    final Offset c = Offset(r, r);
+
+    // Тёмный ободок-тень снизу (объём).
+    canvas.drawCircle(c, r, Paint()..color = const Color(0xFFE0A800));
+    // Тело монеты: золотой круг.
+    canvas.drawCircle(
+        c.translate(0, -r * 0.06), r * 0.92, Paint()..color = const Color(0xFFFFC800));
+    // Внутренний диск светлее.
+    canvas.drawCircle(
+        c.translate(0, -r * 0.06), r * 0.62, Paint()..color = const Color(0xFFFFDD55));
+    // Звёздочка в центре.
+    final Path star = Path();
+    const int points = 5;
+    final Offset sc = c.translate(0, -r * 0.06);
+    for (int i = 0; i < points * 2; i++) {
+      final double ang = -math.pi / 2 + i * math.pi / points;
+      final double rad = i.isEven ? r * 0.4 : r * 0.17;
+      final Offset p = Offset(
+        sc.dx + rad * (size.width / 34) * (34 / size.width) * _cos(ang),
+        sc.dy + rad * _sin(ang),
+      );
+      if (i == 0) {
+        star.moveTo(p.dx, p.dy);
+      } else {
+        star.lineTo(p.dx, p.dy);
+      }
+    }
+    star.close();
+    canvas.drawPath(star, Paint()..color = const Color(0xFFE0A800));
+  }
+
+  static double _cos(double a) => math.cos(a);
+  static double _sin(double a) => math.sin(a);
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Текст с рисованой монеткой: «N [монетка]».
+class CoinText extends StatelessWidget {
+  const CoinText(
+    this.amount, {
+    super.key,
+    this.fontSize = 14,
+    this.color,
+    this.fontWeight = FontWeight.w800,
+  });
+
+  final int amount;
+  final double fontSize;
+  final Color? color;
+  final FontWeight fontWeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          '$amount',
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            color: color,
+          ),
+        ),
+        SizedBox(width: fontSize * 0.22),
+        CoinIcon(size: fontSize * 0.95),
+      ],
+    );
+  }
+}
+
 /// Карточка в игровом стиле: белый фон, заметная рамка, крупные скругления.
 class InfoCard extends StatelessWidget {
   const InfoCard({

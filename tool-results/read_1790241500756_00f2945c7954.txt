@@ -1,0 +1,774 @@
+     1→"use client";
+     2→
+     3→// ─────────────────────────────────────────────────────────────────────
+     4→// Единое состояние приложения (порт сервисов Flutter на zustand):
+     5→//  • PetService            — питомцы, эволюция, серия дней, недельная статистика
+     6→//  • FocusSessionService   — сессия по реальному времени + машина времени ×60
+     7→//  • DiaryService          — дневник с двойным ответом (офлайн + LLM)
+     8→//  • ChallengeService      — «Детокс-неделя», боты с детерминированным сидом
+     9→//  • UpdateService         — проверка version.json + симуляция обновления
+    10→// Всё переживает перезагрузку страницы (localStorage).
+    11→// ─────────────────────────────────────────────────────────────────────
+    12→
+    13→import { create } from "zustand";
+    14→import { persist } from "zustand/middleware";
+    15→import {
+    16→  AppUpdateInfo,
+    17→  Challenge,
+    18→  ChallengeParticipant,
+    19→  DiaryEntry,
+    20→  K_APP_VERSION,
+    21→  K_DEFAULT_UPDATE_URL,
+    22→  LlmConfig,
+    23→  PET_CATALOG,
+    24→  Pet,
+    25→  petStage,
+    26→} from "./types";
+    27→import type { PetType } from "./types";
+    28→import { dailyQuests, QUEST_POOL, XP_PER_TUCK_IN } from "./quests";
+    29→import { moodAnalyze } from "./moodai";
+    30→import { compareVersions, dayKey, mondayMs, nextVersion, seededRandom, stringHash } from "./format";
+    31→
+    32→export const K_DIARY_SYSTEM_PROMPT =
+    33→  "Ты — тёплый и заботливый ИИ-садовник приложения «Росток» " +
+    34→  "о цифровой гигиене и ментальном здоровье. Пользователь вечером пишет " +
+    35→  "короткую заметку о своём дне. Ответь на русском: 2–4 предложения. " +
+    36→  "Поддержи человека, мягко отрази его чувства без осуждения и дай одну " +
+    37→  "практичную рекомендацию для улучшения сна или снижения стресса. " +
+    38→  "Без диагнозов, без канцелярита, обращение на «вы».";
+    39→
+    40→const BOT_NAMES = ["Аня", "Марк", "Лена", "Дима", "Соня", "Кирилл"];
+    41→const BOT_EMOJIS = ["🌻", "🌷", "🌿", "🌲", "🍀", "🐝"];
+    42→
+    43→interface TTGState {
+    44→  hydrated: boolean;
+    45→
+    46→  // Pets & stats
+    47→  pets: Pet[];
+    48→  totalMinutes: number;
+    49→  todayMinutes: number;
+    50→  streakDays: number;
+    51→  weekMinutes: number;
+    52→  /** Монетки (v1.5.0) — валюта магазина. */
+    53→  coins: number;
+    54→  /** Заморозки серии 🧊 (v1.7.0), максимум 2. */
+    55→  freezes: number;
+    56→
+    57→  // ── Задания / сон / погода (v1.7.0) ──
+    58→  questDay: string;
+    59→  questProgress: Record<string, number>;
+    60→  questClaimed: string[];
+    61→  questsDoneTotal: number;
+    62→  tuckInDay: string;
+    63→  weatherMode: "auto" | "date";
+    64→  weatherCondition: string; // clear|partly|cloudy|fog|rain|snow|thunder
+    65→  todayKey: string;
+    66→  lastSessionDayKey: string;
+    67→  weekKey: string;
+    68→
+    69→  // Session — привязана к экранному времени (порт v1.1.0):
+    70→  // засчитывается только время, когда вкладка/приложение НЕ активны
+    71→  // (на телефоне — экран погашен; в демо — вкладка скрыта).
+    72→  sessionStartedAt: number | null; // мс epoch
+    73→  countedSec: number; // уже засчитанные секунды «вне экрана»
+    74→  awaySinceMs: number | null; // когда вкладка скрылась (мс epoch)
+    75→  timeMachine: boolean; // ×60, считает ВСЁ время (тест)
+    76→  lastSessionMinutes: number | null;
+    77→  nowMs: number; // тикер для таймера (не персистится)
+    78→
+    79→  // Выбор питомца (v1.1.0)
+    80→  needsPetChoice: boolean;
+    81→
+    82→  // Diary
+    83→  diaryEntries: DiaryEntry[];
+    84→  llm: LlmConfig;
+    85→
+    86→  // Challenge
+    87→  weekly: Challenge | null;
+    88→
+    89→  // Updates
+    90→  simulateUpdate: boolean;
+    91→  customUpdateUrl: string;
+    92→  availableUpdate: AppUpdateInfo | null;
+    93→  updateLastError: string | null;
+    94→  updateChecking: boolean;
+    95→  appVersion: string;
+    96→
+    97→  hintDismissed: boolean;
+    98→
+    99→  // ── actions ──
+   100→  setHydrated: () => void;
+   101→  tick: () => void;
+   102→  rollDateCounters: () => void;
+   103→  startSession: () => void;
+   104→  stopSession: () => { minutes: number; evolvedPetName: string | null };
+   105→  onAppVisibility: (visible: boolean) => void;
+   106→  choosePet: (type: PetType) => void;
+   107→  openPetChoice: () => void;
+   108→  cancelPetChoice: () => void;
+   109→  addDetoxMinutes: (minutes: number) => string | null; // возвращает имя, если эволюция
+   110→  renamePet: (id: string, name: string) => void;
+   111→  /** Начислить XP активному питомцу (кормление, задания). */
+   112→  addXp: (amount: number) => void;
+   113→  addCoins: (amount: number) => void;
+   114→  /** Купить рамку активному питомцу; false — не хватило монет. */
+   115→  buyFrame: (frameId: string, price: number) => boolean;
+   116→  /** Купить заморозку серии 🧊; false — лимит/не хватает монет. */
+   117→  buyFreeze: () => boolean;
+   118→  /** Прогресс ежедневных заданий (v1.7.0). */
+   119→  addQuestProgress: (questId: string, amount: number) => void;
+   120→  claimQuest: (questId: string) => boolean;
+   121→  tuckIn: () => boolean;
+   122→  setWeatherMode: (m: "auto" | "date") => void;
+   123→  setWeatherCondition: (c: string) => void;
+   124→  setTimeMachine: (v: boolean) => void;
+   125→  addDiaryEntry: (text: string) => DiaryEntry;
+   126→  applyLlmReply: (id: string, reply: string) => void;
+   127→  setLlmConfig: (cfg: LlmConfig) => void;
+   128→  ensureWeekly: () => void;
+   129→  refreshChallenge: () => void;
+   130→  createChallenge: (title: string, goalHours: number) => void;
+   131→  setSimulateUpdate: (v: boolean) => void;
+   132→  setCustomUpdateUrl: (url: string) => void;
+   133→  checkForUpdates: () => Promise<"available" | "latest" | "error" | "simulated">;
+   134→  clearAvailableUpdate: () => void;
+   135→  applyUpdate: (version: string) => void;
+   136→  dismissHint: () => void;
+   137→  resetAll: () => void;
+   138→}
+   139→
+   140→function makeEgg(index: number): Pet {
+   141→  const species = PET_CATALOG[index % PET_CATALOG.length];
+   142→  return {
+   143→    id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
+   144→    name: species.name,
+   145→    type: species.type,
+   146→    bornAt: Date.now(),
+   147→    growthMinutes: 0,
+   148→    xp: 0,
+   149→    frame: "none",
+   150→  };
+   151→}
+   152→
+   153→/** Боты живут своей жизнью: прогресс детерминирован сидом и днём недели. */
+   154→function updateBots(c: Challenge): void {
+   155→  const wd = new Date().getDay() === 0 ? 7 : new Date().getDay();
+   156→  const rnd = seededRandom(stringHash(c.id));
+   157→  for (const p of c.participants) {
+   158→    if (p.isUser) continue;
+   159→    const pacePerDay = 40 + Math.floor(rnd() * 60); // 40–99 мин/день
+   160→    p.minutes = pacePerDay * wd + Math.floor(rnd() * 30);
+   161→  }
+   162→}
+   163→
+   164→function newWeeklyChallenge(goalHours = 10, title = "Детокс-неделя"): Challenge {
+   165→  const monday = mondayMs(new Date());
+   166→  return {
+   167→    id: `w${monday}`,
+   168→    title,
+   169→    goalHours,
+   170→    weekStartMs: monday,
+   171→    isDemo: true,
+   172→    participants: [
+   173→      { name: "Вы", emoji: "🐾", minutes: 0, isUser: true },
+   174→      ...BOT_NAMES.slice(0, 4).map((name, i) => ({
+   175→        name,
+   176→        emoji: BOT_EMOJIS[i],
+   177→        minutes: 0,
+   178→        isUser: false,
+   179→      })),
+   180→    ],
+   181→  };
+   182→}
+   183→
+   184→export const useTTG = create<TTGState>()(
+   185→  persist(
+   186→    (set, get) => ({
+   187→      hydrated: false,
+   188→
+   189→      pets: [],
+   190→      totalMinutes: 0,
+   191→      todayMinutes: 0,
+   192→      streakDays: 0,
+   193→      weekMinutes: 0,
+   194→      coins: 0,
+   195→      freezes: 0,
+   196→
+   197→      questDay: "",
+   198→      questProgress: {},
+   199→      questClaimed: [],
+   200→      questsDoneTotal: 0,
+   201→      tuckInDay: "",
+   202→      weatherMode: "auto",
+   203→      weatherCondition: "clear",
+   204→
+   205→      todayKey: "",
+   206→      lastSessionDayKey: "",
+   207→      weekKey: "",
+   208→
+   209→      sessionStartedAt: null,
+   210→      countedSec: 0,
+   211→      awaySinceMs: null,
+   212→      timeMachine: false,
+   213→      lastSessionMinutes: null,
+   214→      nowMs: Date.now(),
+   215→
+   216→      needsPetChoice: true,
+   217→
+   218→      diaryEntries: [],
+   219→      llm: { baseUrl: "https://api.openai.com/v1", apiKey: "", model: "gpt-4o-mini" },
+   220→
+   221→      weekly: null,
+   222→
+   223→      simulateUpdate: false,
+   224→      customUpdateUrl: "",
+   225→      availableUpdate: null,
+   226→      updateLastError: null,
+   227→      updateChecking: false,
+   228→      appVersion: K_APP_VERSION,
+   229→
+   230→      hintDismissed: false,
+   231→
+   232→      setHydrated: () => set({ hydrated: true }),
+   233→
+   234→      tick: () => {
+   235→        if (get().sessionStartedAt !== null) set({ nowMs: Date.now() });
+   236→      },
+   237→
+   238→      rollDateCounters: () => {
+   239→        const s = get();
+   240→        const now = new Date();
+   241→        const today = dayKey(now);
+   242→        let { todayMinutes, weekMinutes, todayKey, weekKey } = s;
+   243→        if (today !== todayKey) {
+   244→          todayMinutes = 0;
+   245→          todayKey = today;
+   246→        }
+   247→        const monday = mondayMs(now);
+   248→        const wk = dayKey(new Date(monday));
+   249→        if (wk !== weekKey) {
+   250→          weekMinutes = 0;
+   251→          weekKey = wk;
+   252→        }
+   253→        set({ todayMinutes, weekMinutes, todayKey, weekKey });
+   254→      },
+   255→
+   256→      startSession: () => {
+   257→        if (get().sessionStartedAt) return;
+   258→        set({
+   259→          sessionStartedAt: Date.now(),
+   260→          countedSec: 0,
+   261→          awaySinceMs: null,
+   262→        });
+   263→      },
+   264→
+   265→      /** Вкладка скрылась — рост пошёл; вернулась — капнувшее переводим в зачёт. */
+   266→      onAppVisibility: (visible) => {
+   267→        const s = get();
+   268→        if (!s.sessionStartedAt || s.timeMachine) return;
+   269→        if (!visible) {
+   270→          if (!s.awaySinceMs) set({ awaySinceMs: Date.now() });
+   271→          return;
+   272→        }
+   273→        const away = s.awaySinceMs;
+   274→        if (!away) return;
+   275→        const addSec = Math.max(0, Math.floor((Date.now() - away) / 1000));
+   276→        set({ countedSec: s.countedSec + addSec, awaySinceMs: null, nowMs: Date.now() });
+   277→      },
+   278→
+   279→      /** Большой экран выбора: создаём питомца выбранного вида. */
+   280→      choosePet: (type) => {
+   281→        const s = get();
+   282→        const species = PET_CATALOG.find((x) => x.type === type) ?? PET_CATALOG[0];
+   283→        const pet: Pet = {
+   284→          id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
+   285→          name: species.name,
+   286→          type,
+   287→          bornAt: Date.now(),
+   288→          growthMinutes: 0,
+   289→          xp: 0,
+   290→          frame: "none",
+   291→        };
+   292→        set({ pets: [...s.pets, pet], needsPetChoice: false });
+   293→      },
+   294→
+   295→      openPetChoice: () => set({ needsPetChoice: true }),
+   296→      cancelPetChoice: () => set({ needsPetChoice: false }),
+   297→
+   298→      stopSession: () => {
+   299→        const s = get();
+   300→        if (!s.sessionStartedAt) return { minutes: 0, evolvedPetName: null };
+   301→        let minutes: number;
+   302→        if (s.timeMachine) {
+   303→          // 1 секунда = 1 минута, считается всё время
+   304→          minutes = Math.floor((Date.now() - s.sessionStartedAt) / 1000);
+   305→        } else {
+   306→          const pending = s.awaySinceMs
+   307→            ? Math.max(0, Math.floor((Date.now() - s.awaySinceMs) / 1000))
+   308→            : 0;
+   309→          minutes = Math.floor((s.countedSec + pending) / 60);
+   310→        }
+   311→        set({
+   312→          sessionStartedAt: null,
+   313→          countedSec: 0,
+   314→          awaySinceMs: null,
+   315→          lastSessionMinutes: minutes,
+   316→        });
+   317→        const evolved = s.addDetoxMinutes(minutes);
+   318→        return { minutes, evolvedPetName: evolved };
+   319→      },
+   320→
+   321→      addDetoxMinutes: (minutes) => {
+   322→        if (minutes <= 0) return null;
+   323→        get().rollDateCounters();
+   324→        const s = get();
+   325→
+   326→        let pets = [...s.pets];
+   327→        let targetIdx = pets.findIndex((p) => petStage(p) < 3);
+   328→        if (targetIdx === -1) {
+   329→          pets.push(makeEgg(pets.length));
+   330→          targetIdx = pets.length - 1;
+   331→        }
+   332→        const target = pets[targetIdx];
+   333→        const wasAdult = petStage(target) >= 3;
+   334→        let evolvedName: string | null = null;
+   335→        const updatedTarget: Pet = {
+   336→          ...target,
+   337→          growthMinutes: target.growthMinutes + minutes,
+   338→          // XP-экономика (v1.5.0): 1 минута детокса = 1 XP питомцу.
+   339→          xp: (target.xp ?? 0) + minutes,
+   340→        };
+   341→        if (!wasAdult && petStage(updatedTarget) >= 3) {
+   342→          evolvedName = updatedTarget.name;
+   343→        }
+   344→        pets[targetIdx] = updatedTarget;
+   345→
+   346→        // Серия дней
+   347→        let { streakDays, lastSessionDayKey } = s;
+   348→        const today = dayKey(new Date());
+   349→        if (lastSessionDayKey !== today) {
+   350→          const y = new Date();
+   351→          y.setDate(y.getDate() - 1);
+   352→          streakDays = lastSessionDayKey === dayKey(y) ? streakDays + 1 : 1;
+   353→          lastSessionDayKey = today;
+   354→        }
+   355→
+   356→        set({
+   357→          pets,
+   358→          totalMinutes: s.totalMinutes + minutes,
+   359→          todayMinutes: s.todayMinutes + minutes,
+   360→          weekMinutes: s.weekMinutes + minutes,
+   361→          // Монетки (v1.5.0): 1 минута = 1 монетка.
+   362→          coins: (s.coins ?? 0) + minutes,
+   363→          // Задания session_10/session_30 (v1.7.0): минуты капают в прогресс.
+   364→          questProgress: (() => {
+   365→            const day = dayKey(new Date());
+   366→            const qp = s.questDay === day ? { ...s.questProgress } : {};
+   367→            qp.session_10 = (qp.session_10 ?? 0) + minutes;
+   368→            qp.session_30 = (qp.session_30 ?? 0) + minutes;
+   369→            return qp;
+   370→          })(),
+   371→          questDay: dayKey(new Date()),
+   372→          streakDays,
+   373→          lastSessionDayKey,
+   374→          weekly: s.weekly
+   375→            ? {
+   376→                ...s.weekly,
+   377→                participants: s.weekly.participants.map((p) =>
+   378→                  p.isUser ? { ...p, minutes: s.weekMinutes + minutes } : p
+   379→                ),
+   380→              }
+   381→            : null,
+   382→        });
+   383→        return evolvedName;
+   384→      },
+   385→
+   386→      renamePet: (id, name) => {
+   387→        const clean = name.trim();
+   388→        if (!clean) return;
+   389→        set({
+   390→          pets: get().pets.map((p) => (p.id === id ? { ...p, name: clean } : p)),
+   391→        });
+   392→      },
+   393→
+   394→      addXp: (amount) => {
+   395→        if (amount <= 0) return;
+   396→        set({
+   397→          pets: get().pets.map((p) =>
+   398→            petStage(p) < 3 ? { ...p, xp: (p.xp ?? 0) + amount } : p
+   399→          ),
+   400→        });
+   401→      },
+   402→
+   403→      addCoins: (amount) =>
+   404→        set({ coins: Math.max(0, (get().coins ?? 0) + amount) }),
+   405→
+   406→      buyFrame: (frameId, price) => {
+   407→        const s = get();
+   408→        if ((s.coins ?? 0) < price) return false;
+   409→        const idx = s.pets.findIndex((p) => petStage(p) < 3);
+   410→        if (idx === -1) return false;
+   411→        set({
+   412→          coins: s.coins - price,
+   413→          pets: s.pets.map((p, i) =>
+   414→            i === idx ? { ...p, frame: frameId } : p
+   415→          ),
+   416→        });
+   417→        return true;
+   418→      },
+   419→
+   420→      buyFreeze: () => {
+   421→        const s = get();
+   422→        if (s.freezes >= 2) return false;
+   423→        if (s.coins < 200) return false;
+   424→        set({ coins: s.coins - 200, freezes: s.freezes + 1 });
+   425→        return true;
+   426→      },
+   427→
+   428→      // ── Задания дня (v1.7.0) ──────────────────────────────────────
+   429→      addQuestProgress: (questId, amount) => {
+   430→        const s = get();
+   431→        const day = dayKey(new Date());
+   432→        let questProgress = s.questProgress;
+   433→        let questClaimed = s.questClaimed;
+   434→        let questDay = s.questDay;
+   435→        if (questDay !== day) {
+   436→          // Новый день — прогресс сбрасывается.
+   437→          questDay = day;
+   438→          questProgress = {};
+   439→          questClaimed = [];
+   440→        }
+   441→        if (questClaimed.includes(questId)) return;
+   442→        const q = QUEST_POOL.find((x) => x.id === questId);
+   443→        if (!q) return;
+   444→        const cur = questProgress[questId] ?? 0;
+   445→        if (cur >= q.target) return;
+   446→        set({
+   447→          questDay,
+   448→          questProgress: { ...questProgress, [questId]: cur + amount },
+   449→          questClaimed,
+   450→        });
+   451→      },
+   452→
+   453→      claimQuest: (questId) => {
+   454→        const s = get();
+   455→        const day = dayKey(new Date());
+   456→        const questDay = s.questDay || day;
+   457→        const claimed = s.questClaimed.filter((x) => questDay === day ? true : false);
+   458→        const list = questDay === day ? s.questClaimed : [];
+   459→        void claimed;
+   460→        const q = QUEST_POOL.find((x) => x.id === questId);
+   461→        if (!q) return false;
+   462→        if (list.includes(questId)) return false;
+   463→        const progress = questDay === day ? s.questProgress : {};
+   464→        if ((progress[questId] ?? 0) < q.target) return false;
+   465→        set({
+   466→          questClaimed: [...list, questId],
+   467→          questsDoneTotal: s.questsDoneTotal + 1,
+   468→          coins: s.coins + q.rewardCoins,
+   469→          pets: s.pets.map((p) =>
+   470→            petStage(p) < 3 ? { ...p, xp: (p.xp ?? 0) + q.rewardXp } : p
+   471→          ),
+   472→        });
+   473→        return true;
+   474→      },
+   475→
+   476→      tuckIn: () => {
+   477→        const s = get();
+   478→        const day = dayKey(new Date());
+   479→        if (s.tuckInDay === day) return false;
+   480→        set({
+   481→          tuckInDay: day,
+   482→          pets: s.pets.map((p) =>
+   483→            petStage(p) < 3 ? { ...p, xp: (p.xp ?? 0) + XP_PER_TUCK_IN } : p
+   484→          ),
+   485→        });
+   486→        return true;
+   487→      },
+   488→
+   489→      setWeatherMode: (m) => set({ weatherMode: m }),
+   490→      setWeatherCondition: (c) => set({ weatherCondition: c }),
+   491→
+   492→      setTimeMachine: (v) => set({ timeMachine: v }),
+   493→
+   494→      addDiaryEntry: (text) => {
+   495→        const local = moodAnalyze(text);
+   496→        const entry: DiaryEntry = {
+   497→          id: `d${Date.now()}`,
+   498→          createdAt: Date.now(),
+   499→          text,
+   500→          moodScore: local.score,
+   501→          tags: local.tags,
+   502→          aiReply: local.reply,
+   503→          source: "local",
+   504→        };
+   505→        set({ diaryEntries: [entry, ...get().diaryEntries] });
+   506→        return entry;
+   507→      },
+   508→
+   509→      applyLlmReply: (id, reply) => {
+   510→        set({
+   511→          diaryEntries: get().diaryEntries.map((e) =>
+   512→            e.id === id ? { ...e, aiReply: reply, source: "llm" as const } : e
+   513→          ),
+   514→        });
+   515→      },
+   516→
+   517→      setLlmConfig: (cfg) =>
+   518→        set({
+   519→          llm: {
+   520→            baseUrl: cfg.baseUrl.trim() || "https://api.openai.com/v1",
+   521→            apiKey: cfg.apiKey.trim(),
+   522→            model: cfg.model.trim() || "gpt-4o-mini",
+   523→          },
+   524→        }),
+   525→
+   526→      ensureWeekly: () => {
+   527→        const s = get();
+   528→        const monday = mondayMs(new Date());
+   529→        if (!s.weekly || s.weekly.weekStartMs !== monday) {
+   530→          set({ weekly: newWeeklyChallenge() });
+   531→        }
+   532→      },
+   533→
+   534→      refreshChallenge: () => {
+   535→        get().ensureWeekly();
+   536→        const s = get();
+   537→        if (!s.weekly) return;
+   538→        const weekly: Challenge = { ...s.weekly, participants: [...s.weekly.participants] };
+   539→        updateBots(weekly);
+   540→        weekly.participants = weekly.participants.map((p) =>
+   541→          p.isUser ? { ...p, minutes: s.weekMinutes } : p
+   542→        );
+   543→        set({ weekly });
+   544→      },
+   545→
+   546→      createChallenge: (title, goalHours) => {
+   547→        const monday = mondayMs(new Date());
+   548→        const goal = Math.min(60, Math.max(1, goalHours));
+   549→        const rnd = seededRandom(Date.now() % 2147483647);
+   550→        const pick = <T,>(arr: T[]) => arr[Math.floor(rnd() * arr.length)];
+   551→        const weekly: Challenge = {
+   552→          id: `w${monday}-${Date.now() % 100000}`,
+   553→          title: title.trim() || "Мой челлендж",
+   554→          goalHours: goal,
+   555→          weekStartMs: monday,
+   556→          isDemo: true,
+   557→          participants: [
+   558→            { name: "Вы", emoji: "🐾", minutes: get().weekMinutes, isUser: true },
+   559→            ...Array.from({ length: 4 }, () => {
+   560→              const i = Math.floor(rnd() * BOT_NAMES.length);
+   561→              return {
+   562→                name: pick(BOT_NAMES),
+   563→                emoji: BOT_EMOJIS[i],
+   564→                minutes: 0,
+   565→                isUser: false,
+   566→              };
+   567→            }),
+   568→          ],
+   569→        };
+   570→        updateBots(weekly);
+   571→        weekly.participants = weekly.participants.map((p) =>
+   572→          p.isUser ? { ...p, minutes: get().weekMinutes } : p
+   573→        );
+   574→        set({ weekly });
+   575→      },
+   576→
+   577→      setSimulateUpdate: (v) =>
+   578→        set({
+   579→          simulateUpdate: v,
+   580→          availableUpdate: v ? simulatedInfo(get().appVersion) : null,
+   581→        }),
+   582→
+   583→      setCustomUpdateUrl: (url) => set({ customUpdateUrl: url }),
+   584→
+   585→      checkForUpdates: async () => {
+   586→        const s = get();
+   587→        if (s.simulateUpdate) {
+   588→          set({ availableUpdate: simulatedInfo(s.appVersion) });
+   589→          return "simulated";
+   590→        }
+   591→        set({ updateChecking: true, updateLastError: null });
+   592→        const url = s.customUpdateUrl.trim() || K_DEFAULT_UPDATE_URL;
+   593→        try {
+   594→          const res = await fetch(url, { cache: "no-store" });
+   595→          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+   596→          const data = (await res.json()) as AppUpdateInfo;
+   597→          const isNewer = compareVersions(data.latest_version ?? "", s.appVersion) > 0;
+   598→          set({
+   599→            updateChecking: false,
+   600→            availableUpdate: isNewer ? data : null,
+   601→          });
+   602→          return isNewer ? "available" : "latest";
+   603→        } catch (e) {
+   604→          set({
+   605→            updateChecking: false,
+   606→            updateLastError: `Не удалось проверить обновления: ${e instanceof Error ? e.message : "ошибка сети"}`,
+   607→          });
+   608→          return "error";
+   609→        }
+   610→      },
+   611→
+   612→      clearAvailableUpdate: () => set({ availableUpdate: null }),
+   613→
+   614→      applyUpdate: (version) =>
+   615→        set({
+   616→          appVersion: version,
+   617→          availableUpdate: null,
+   618→          simulateUpdate: false,
+   619→        }),
+   620→
+   621→      dismissHint: () => set({ hintDismissed: true }),
+   622→
+   623→      resetAll: () =>
+   624→        set({
+   625→          pets: [],
+   626→          needsPetChoice: true,
+   627→          totalMinutes: 0,
+   628→          todayMinutes: 0,
+   629→          streakDays: 0,
+   630→          weekMinutes: 0,
+   631→          coins: 0,
+   632→          freezes: 0,
+   633→          questDay: "",
+   634→          questProgress: {},
+   635→          questClaimed: [],
+   636→          questsDoneTotal: 0,
+   637→          tuckInDay: "",
+   638→          lastSessionDayKey: "",
+   639→          sessionStartedAt: null,
+   640→          countedSec: 0,
+   641→          awaySinceMs: null,
+   642→          lastSessionMinutes: null,
+   643→          diaryEntries: [],
+   644→          weekly: newWeeklyChallenge(),
+   645→          simulateUpdate: false,
+   646→          availableUpdate: null,
+   647→          updateLastError: null,
+   648→        }),
+   649→    }),
+   650→    {
+   651→      name: "ttg-web-state-v1",
+   652→      version: 3,
+   653→      partialize: (s) => ({
+   654→        pets: s.pets,
+   655→        totalMinutes: s.totalMinutes,
+   656→        todayMinutes: s.todayMinutes,
+   657→        streakDays: s.streakDays,
+   658→        weekMinutes: s.weekMinutes,
+   659→        coins: s.coins,
+   660→        freezes: s.freezes,
+   661→        questDay: s.questDay,
+   662→        questProgress: s.questProgress,
+   663→        questClaimed: s.questClaimed,
+   664→        questsDoneTotal: s.questsDoneTotal,
+   665→        tuckInDay: s.tuckInDay,
+   666→        weatherMode: s.weatherMode,
+   667→        todayKey: s.todayKey,
+   668→        lastSessionDayKey: s.lastSessionDayKey,
+   669→        weekKey: s.weekKey,
+   670→        sessionStartedAt: s.sessionStartedAt,
+   671→        countedSec: s.countedSec,
+   672→        awaySinceMs: s.awaySinceMs,
+   673→        timeMachine: s.timeMachine,
+   674→        needsPetChoice: s.needsPetChoice,
+   675→        diaryEntries: s.diaryEntries,
+   676→        llm: s.llm,
+   677→        weekly: s.weekly,
+   678→        simulateUpdate: s.simulateUpdate,
+   679→        customUpdateUrl: s.customUpdateUrl,
+   680→        appVersion: s.appVersion,
+   681→        hintDismissed: s.hintDismissed,
+   682→      }),
+   683→      migrate: (persisted: unknown, version: number) => {
+   684→        const s = persisted as Partial<TTGState>;
+   685→        if (version < 2) {
+   686→          // v1: яйцо создавалось автоматически — тем, у кого коллекция
+   687→          // уже есть, выбор не показываем; новым — показываем.
+   688→          s.needsPetChoice = !s.pets || s.pets.length === 0;
+   689→          s.countedSec = 0;
+   690→          s.awaySinceMs = null;
+   691→        }
+   692→        if (version < 3) {
+   693→          // v3 (v1.5.0–v1.7.0): XP-экономика, монеты, заморозки,
+   694→          // задания, сон, погода. Прежние питомцы получают xp=0.
+   695→          s.pets = (s.pets ?? []).map((p) => ({
+   696→            ...p,
+   697→            xp: p.xp ?? 0,
+   698→            frame: p.frame ?? "none",
+   699→          }));
+   700→          s.coins = s.coins ?? 0;
+   701→          s.freezes = s.freezes ?? 0;
+   702→          s.questDay = s.questDay ?? "";
+   703→          s.questProgress = s.questProgress ?? {};
+   704→          s.questClaimed = s.questClaimed ?? [];
+   705→          s.questsDoneTotal = s.questsDoneTotal ?? 0;
+   706→          s.tuckInDay = s.tuckInDay ?? "";
+   707→          s.weatherMode = s.weatherMode ?? "auto";
+   708→          s.weatherCondition = s.weatherCondition ?? "clear";
+   709→        }
+   710→        return s as TTGState;
+   711→      },
+   712→      onRehydrateStorage: () => (state) => {
+   713→        state?.setHydrated();
+   714→      },
+   715→    }
+   716→  )
+   717→);
+   718→
+   719→function simulatedInfo(current: string): AppUpdateInfo {
+   720→  return {
+   721→    latest_version: nextVersion(current),
+   722→    notes:
+   723→      "Демо-обновление: ровно так баннер увидят все пользователи " +
+   724→      "после публикации нового version.json на хостинге.",
+   725→    force_update: false,
+   726→    android_url: "https://play.google.com/store/apps/details?id=REPLACE_ME",
+   727→    ios_url: "https://apps.apple.com/app/REPLACE_ME",
+   728→  };
+   729→}
+   730→
+   731→/** Селекторы-помощники */
+   732→export function activePet(pets: Pet[]): Pet | null {
+   733→  for (const p of pets) if (petStage(p) < 3) return p;
+   734→  return null;
+   735→}
+   736→
+   737→export function adultCount(pets: Pet[]): number {
+   738→  return pets.filter((p) => petStage(p) >= 3).length;
+   739→}
+   740→
+   741→export function leaderboard(weekly: Challenge | null): ChallengeParticipant[] {
+   742→  if (!weekly) return [];
+   743→  return [...weekly.participants].sort((a, b) => b.minutes - a.minutes);
+   744→}
+   745→
+   746→export function daysLeft(): number {
+   747→  const now = new Date();
+   748→  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+   749→  const monday = new Date(today);
+   750→  const wd = now.getDay() === 0 ? 7 : now.getDay();
+   751→  monday.setDate(today.getDate() - (wd - 1));
+   752→  const nextMonday = new Date(monday);
+   753→  nextMonday.setDate(monday.getDate() + 7);
+   754→  return Math.round((nextMonday.getTime() - today.getTime()) / 86400000);
+   755→}
+   756→
+   757→/** Засчитанные секунды текущей сессии (фон + текущий период вне вкладки). */
+   758→export function countedSecondsSoFar(s: {
+   759→  sessionStartedAt: number | null;
+   760→  countedSec: number;
+   761→  awaySinceMs: number | null;
+   762→  timeMachine: boolean;
+   763→  nowMs: number;
+   764→}): number {
+   765→  if (!s.sessionStartedAt) return 0;
+   766→  if (s.timeMachine) {
+   767→    return Math.floor((s.nowMs - s.sessionStartedAt) / 1000) * 60;
+   768→  }
+   769→  const pending = s.awaySinceMs
+   770→    ? Math.max(0, Math.floor((s.nowMs - s.awaySinceMs) / 1000))
+   771→    : 0;
+   772→  return s.countedSec + pending;
+   773→}
+   774→

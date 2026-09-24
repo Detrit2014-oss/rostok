@@ -271,7 +271,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 StatTile(
                   icon: Icons.paid_rounded,
                   value: '${pet.coins}',
-                  label: 'монеток 🪙',
+                  label: 'монеток',
                   color: Palette.yellowDark,
                 ),
                 StatTile(
