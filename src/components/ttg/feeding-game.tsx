@@ -10,6 +10,7 @@ import {
   C,
   isAquatic,
   isPlant,
+  petStage,
   speciesStyle,
 } from "@/lib/ttg/types";
 import type { Pet, PetType } from "@/lib/ttg/types";
@@ -39,7 +40,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
   const addQuestProgress = useTTG((s) => s.addQuestProgress);
   const coins = useTTG((s) => s.coins);
 
-  const pet: Pet | null = pets.find((p) => petStageOf(p) < 3) ?? null;
+  const pet: Pet | null = pets.find((p) => petStage(p) < 3) ?? null;
   const aquatic = pet ? isAquatic(pet.type) : false;
   const plant = pet ? isPlant(pet.type) : false;
 
@@ -261,13 +262,6 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
     // Полёт в рот — визуально сжимаем координату Y к точке рта.
     return 240 * 0.52;
   }
-}
-
-function petStageOf(p: Pet): number {
-  if (p.growthMinutes >= 30) return 3;
-  if (p.growthMinutes >= 15) return 2;
-  if (p.growthMinutes >= 5) return 1;
-  return 0;
 }
 
 /** Открытый рот: тёмная пасть с язычком. */

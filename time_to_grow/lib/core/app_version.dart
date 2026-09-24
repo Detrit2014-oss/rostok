@@ -7,7 +7,7 @@
 ///   3) CHANGELOG.md     — описать изменения
 ///   4) version.json на хостинге — см. docs/UPDATE_FLOW.md
 /// ─────────────────────────────────────────────────────────────────────
-const String kAppVersion = '1.9.0';
+const String kAppVersion = '2.0.0';
 
 const int kAppBuildNumber = 9;
 

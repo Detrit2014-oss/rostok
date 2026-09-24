@@ -1,11 +1,14 @@
 "use client";
 
-// Порт lib/widgets/pet_canvas.dart (v1.9.0): небо, солнце, облака, лужайка,
+// Порт lib/widgets/pet_canvas.dart (v2.0.0): небо, солнце, облака, лужайка,
 // пруд для водных питомцев, погода (дождь/снег/туман/гроза) и 30 персонажей,
 // нарисованных полностью процедурно (SVG) — ни одной картинки.
-// v1.9.0: звери ходят по лужайке как настоящие (голова на шее, 4 лапы с
-// походкой), растения всходят из семечка, гардероб рисуется на питомце.
+// v2.0.0 «Настоящие звери»: анатомия в профиль (силуэт с грудью/крупом,
+// лапы с коленом, один глаз, видовы морды) и НАСТОЯЩИЕ ПОВАДКИ — зверь
+// гуляет, останавливается принюхаться, пощипать траву, сесть или поклевать.
+// Бабочки порхают, трава качается.
 
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import {
@@ -246,13 +249,10 @@ function Plant({ s, type, sleeping }: { s: number; type: PetType; sleeping: bool
   );
 }
 
-// ── v1.9.0: реалистичные животные ──────────────────────────────────────
-// Звери ходят по лужайке: голова на шее, тело на четырёх лапах с
-// чередующейся походкой (SMIL), птицы семенят на двух, прыгуны скачут.
+// ── v2.0.0: настоящие звери ───────────────────────────────────────
+// Звери ходят по лужайке с повадками: силуэт с грудью/крупом, лапы с
+// коленом, один глаз, видовы морды; паузы — принюхивание/пастьба/сидя/клюёт.
 // Гардероб (шапки/шарфы/очки/окрасы) рисуется прямо на питомце.
-
-const WALK_DUR = 0.72; // длительность шага, с
-const PACE_DUR = 13; // цикл «туда-обратно» по лужайке, с
 
 interface AnimalProps {
   s: number;
@@ -262,57 +262,123 @@ interface AnimalProps {
 }
 
 /** Ходьба по лужайке: треугольная волна + разворот в концах. */
-function Pace({ children, delay }: { children: React.ReactNode; delay: number }) {
-  return (
-    <g>
-      <animateTransform
-        attributeName="transform"
-        type="translate"
-        values="-46 0; 46 0; -46 0"
-        keyTimes="0;0.5;1"
-        calcMode="linear"
-        dur={`${PACE_DUR}s`}
-        begin={`${-delay}s`}
-        repeatCount="indefinite"
-      />
-      <g>
-        <animateTransform
-          attributeName="transform"
-          type="scale"
-          values="1 1;1 1;-1 1;-1 1;1 1"
-          keyTimes="0;0.4999;0.5;0.9999;1"
-          calcMode="linear"
-          dur={`${PACE_DUR}s`}
-          begin={`${-delay}s`}
-          repeatCount="indefinite"
-        />
-        {children}
-      </g>
-    </g>
-  );
+
+// ── Повадки настоящих зверей (v2.0.0) — порт _petBehavior из Dart ──────
+const STROLL_PERIOD = 21; // цикл «прогулка + пауза», с
+const PAUSE_AT = 13.5; // начало паузы внутри цикла
+const PAUSE_LEN = 3.8; // длительность паузы, с
+const CROSS_SEC = 8.2; // полпути через лужайку, с
+
+interface PetBehavior {
+  x: number; // позиция на лужайке 0..1
+  facing: number; // 1 вправо / -1 влево
+  kind: "walk" | "sniff" | "graze" | "sit" | "peck" | "look";
+  headPitch: number; // наклон головы вниз, рад
+  stride: number; // фаза шага, рад (на паузе замирает)
+  poseEase: number; // 0..1 плавный вход в позу
 }
 
-/** Лапа с походкой (вращение вокруг бедра). */
-function LegQ({
-  hx, hy, len, w, color, phase, sleeping,
+const GRAZERS: PetType[] = ["deer", "unicorn", "bunny", "squirrel", "pig", "koala", "panda", "dragon", "hedgehog"];
+const PERCHERS: PetType[] = ["fox", "cat", "dog", "raccoon", "bear"];
+const PECKERS: PetType[] = ["owl", "duck", "chick", "penguin"];
+
+function strHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) & 0x7fffffff;
+  return h >>> 0;
+}
+
+function pbHash(a: number, b: number): number {
+  let h = (a * 374761393 + b * 668265263) % 2147483647;
+  if (h < 0) h += 2147483647;
+  h = ((h ^ (h >> 13)) * 1274126177) % 2147483647;
+  if (h < 0) h += 2147483647;
+  return (((h ^ (h >> 16)) >>> 0) % 2147483647) / 2147483647;
+}
+
+function petBehavior(pet: Pet, tSec: number): PetBehavior {
+  const seed = strHash(pet.id);
+  const off = (seed % 1900) / 100; // у каждого зверя своё расписание
+  const total = tSec + off;
+  const local = total % STROLL_PERIOD;
+  const cycle = Math.floor(total / STROLL_PERIOD);
+
+  // «Чистое» время шага: паузы не двигают зверя и не качают лапы.
+  const pauseDone = cycle * PAUSE_LEN + (local >= PAUSE_AT ? Math.min(local - PAUSE_AT, PAUSE_LEN) : 0);
+  const walkT = tSec - pauseDone;
+  const tri = ((walkT + off) / CROSS_SEC) % 2;
+  const x = tri < 1 ? tri : 2 - tri;
+  const facing = tri < 1 ? 1 : -1;
+  const stride = ((walkT + off) * 2 * Math.PI) / 0.8;
+
+  if (local < PAUSE_AT || local >= PAUSE_AT + PAUSE_LEN) {
+    return { x, facing, kind: "walk", headPitch: 0.05 + Math.sin(stride * 2) * 0.03, stride, poseEase: 0 };
+  }
+
+  // Пауза: что делает зверь — стабильно на весь цикл.
+  const r = pbHash(seed, cycle);
+  let kind: PetBehavior["kind"];
+  if (PECKERS.includes(pet.type)) kind = r < 0.62 ? "peck" : "look";
+  else if (PERCHERS.includes(pet.type)) kind = r < 0.4 ? "sniff" : r < 0.78 ? "sit" : "look";
+  else if (GRAZERS.includes(pet.type)) kind = r < 0.55 ? "graze" : r < 0.85 ? "sniff" : "look";
+  else kind = r < 0.5 ? "sniff" : "look";
+
+  const tin = Math.min(1, Math.max(0, (local - PAUSE_AT) / 0.7));
+  const tout = Math.min(1, Math.max(0, (PAUSE_AT + PAUSE_LEN - local) / 0.7));
+  const smooth = Math.min(tin, tout) ** 2 * (3 - 2 * Math.min(tin, tout));
+
+  let target: number;
+  if (kind === "graze") target = 1.0 + Math.sin(tSec * 8.5) * 0.06;
+  else if (kind === "sniff") target = 0.62 + Math.sin(tSec * 7) * 0.07;
+  else if (kind === "peck") {
+    const pp = (((local - PAUSE_AT) / PAUSE_LEN) * 3) % 1;
+    target = Math.abs(Math.sin(pp * Math.PI)) * 0.85;
+  } else target = 0.1 + Math.sin(tSec * 1.6) * 0.12;
+
+  return { x, facing, kind, headPitch: target * smooth, stride, poseEase: smooth };
+}
+
+/** rAF-движок повадок: ~24 к/с, SSR-безопасно (до монтирования — пауза). */
+function useBehavior(pet: Pet, active: boolean): PetBehavior | null {
+  const [bhv, setBhv] = useState<PetBehavior | null>(null);
+  const petRef = useRef(pet);
+  useEffect(() => {
+    petRef.current = pet;
+  }, [pet]);
+  useEffect(() => {
+    if (!active) return;
+    let raf = 0;
+    let last = 0;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      if (now - last < 42) return;
+      last = now;
+      setBhv(petBehavior(petRef.current, (now - t0) / 1000));
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active, pet.id]);
+  return active ? bhv : null;
+}
+
+/** Лапа с коленом: бедро, голень и лапка с пальцами (углы из повадок). */
+function LegV2({
+  hx, hy, len, w, color, swing, rear,
 }: {
   hx: number; hy: number; len: number; w: number;
-  color: string; phase: number; sleeping: boolean;
+  color: string; swing: number; rear?: boolean;
 }) {
+  const knee = Math.max(0, -Math.sin(swing)) * 0.5;
   return (
-    <g transform={`translate(${hx} ${hy})`}>
-      <g>
-        {!sleeping && (
-          <animateTransform
-            attributeName="transform" type="rotate"
-            values="-14;14;-14" keyTimes="0;0.5;1" calcMode="linear"
-            dur={`${WALK_DUR}s`} begin={`${-phase}s`} repeatCount="indefinite"
-          />
-        )}
-        <rect x={-w / 2} y={-2} width={w} height={len + 2} rx={w * 0.5} fill={color} />
-        <ellipse cx={0} cy={len} rx={w * 0.78} ry={w * 0.48} fill={color} />
+    <g transform={`translate(${hx} ${hy}) rotate(${(swing * 180) / Math.PI})`}>
+      <ellipse cx={0} cy={len * 0.06} rx={w * (rear ? 1.05 : 0.85)} ry={len * 0.275} fill={color} />
+      <rect x={-w / 2} y={0} width={w} height={len * 0.58} rx={w * 0.45} fill={color} />
+      <g transform={`translate(0 ${len * 0.54}) rotate(${(knee * 180) / Math.PI})`}>
+        <rect x={-w * 0.42} y={0} width={w * 0.84} height={len * 0.46} rx={w * 0.4} fill={color} />
+        <ellipse cx={w * 0.1} cy={len * 0.44} rx={w * 0.775} ry={w * 0.475} fill={color} />
         {[-1, 0, 1].map((t) => (
-          <circle key={t} cx={t * w * 0.42} cy={len + w * 0.12} r={w * 0.14} fill="#FFFFFF" opacity="0.3" />
+          <circle key={t} cx={w * 0.1 + t * w * 0.42} cy={len * 0.44 + w * 0.12} r={w * 0.13} fill="#FFFFFF" opacity="0.28" />
         ))}
       </g>
     </g>
@@ -320,22 +386,41 @@ function LegQ({
 }
 
 /** Хвост четвероногого: пышный с белым кончиком, тонкий, колечком, помпон. */
-function TailQ({
-  ax, ay, bw, bh, kind, body, wag,
+function TailV2({
+  ax, ay, bw, bh, kind, body, wag, wrap, s,
 }: {
   ax: number; ay: number; bw: number; bh: number;
-  kind: string; body: string; wag: boolean;
+  kind: string; body: string; wag: boolean; wrap?: boolean; s: number;
 }) {
+  if (wrap) {
+    // Сидит: хвост обёрнут вокруг крупа.
+    const ring = {
+      cx: ax + bw * 0.1, cy: ay + bh * 0.12,
+      rx: bw * 0.22, ry: bh * 0.27,
+    };
+    return (
+      <g>
+        <ellipse cx={ring.cx} cy={ring.cy} rx={ring.rx} ry={ring.ry} stroke={body}
+          strokeWidth={kind === "bushy" ? 10 * s : 5 * s} fill="none"
+          strokeDasharray={`${ring.rx * 2.6} ${ring.rx * 6}`} transform={`rotate(24 ${ring.cx} ${ring.cy})`} strokeLinecap="round" />
+        {kind === "bushy" && (
+          <ellipse cx={ring.cx} cy={ring.cy} rx={ring.rx} ry={ring.ry} stroke="#FFFFFF" opacity="0.8"
+            strokeWidth={10 * s} fill="none"
+            strokeDasharray={`${ring.rx * 0.9} ${ring.rx * 6}`} transform={`rotate(24 ${ring.cx} ${ring.cy})`} strokeLinecap="round" />
+        )}
+      </g>
+    );
+  }
   let art: React.ReactNode = null;
   if (kind === "bushy") {
     art = (
       <g>
         <path
-          d={`M 0 ${bh * 0.18} Q ${-bw * 0.42} ${bh * 0.1} ${-bw * 0.34} ${-bh * 0.42} Q ${-bw * 0.12} ${-bh * 0.12} 0 ${bh * 0.18} Z`}
+          d={`M 0 ${bh * 0.12} C ${-bw * 0.3} ${bh * 0.3} ${-bw * 0.55} ${bh * 0.22} ${-bw * 0.7} 0 C ${-bw * 0.8} ${-bh * 0.14} ${-bw * 0.72} ${-bh * 0.34} ${-bw * 0.56} ${-bh * 0.3} C ${-bw * 0.62} ${-bh * 0.18} ${-bw * 0.52} ${-bh * 0.02} ${-bw * 0.3} ${bh * 0.02} C ${-bw * 0.18} ${bh * 0.05} ${-bw * 0.08} ${bh * 0.1} 0 ${bh * 0.12} Z`}
           fill={body}
         />
         <path
-          d={`M ${-bw * 0.315} ${-bh * 0.3} Q ${-bw * 0.36} ${-bh * 0.42} ${-bw * 0.34} ${-bh * 0.42} Q ${-bw * 0.2} ${-bh * 0.24} ${-bw * 0.16} ${-bh * 0.14} Q ${-bw * 0.26} ${-bh * 0.16} ${-bw * 0.315} ${-bh * 0.3} Z`}
+          d={`M ${-bw * 0.7} 0 C ${-bw * 0.8} ${-bh * 0.14} ${-bw * 0.72} ${-bh * 0.34} ${-bw * 0.56} ${-bh * 0.3} C ${-bw * 0.6} ${-bh * 0.16} ${-bw * 0.58} ${-bh * 0.06} ${-bw * 0.52} ${bh * 0.02} C ${-bw * 0.58} ${bh * 0.04} ${-bw * 0.65} ${bh * 0.03} ${-bw * 0.7} 0 Z`}
           fill="#FFFFFF"
           opacity="0.85"
         />
@@ -344,9 +429,9 @@ function TailQ({
   } else if (kind === "thin") {
     art = (
       <path
-        d={`M 0 ${bh * 0.2} Q ${-bw * 0.3} ${bh * 0.26} ${-bw * 0.3} ${-bh * 0.2}`}
+        d={`M 0 ${bh * 0.2} C ${-bw * 0.26} ${bh * 0.3} ${-bw * 0.36} ${bh * 0.02} ${-bw * 0.22} ${-bh * 0.34} Q ${-bw * 0.16} ${-bh * 0.46} ${-bw * 0.06} ${-bh * 0.4}`}
         stroke={body}
-        strokeWidth={5 * (bw / 78)}
+        strokeWidth={5 * s}
         strokeLinecap="round"
         fill="none"
       />
@@ -356,9 +441,9 @@ function TailQ({
       <circle
         cx={-bw * 0.06}
         cy={0}
-        r={6.5 * (bw / 78)}
+        r={6.5 * s}
         stroke={body}
-        strokeWidth={5 * (bw / 78)}
+        strokeWidth={5 * s}
         fill="none"
       />
     );
@@ -372,7 +457,7 @@ function TailQ({
         {wag && (
           <animateTransform
             attributeName="transform" type="rotate"
-            values="-9;9;-9" dur="0.5s" repeatCount="indefinite"
+            values="-8;8;-8" dur="0.62s" repeatCount="indefinite"
           />
         )}
         {art}
@@ -582,101 +667,105 @@ function HeadDetails({
   return null;
 }
 
-/** Морда: глаза, румянец, нос/клюв/зубки. */
+/** Морда в профиль: один глаз, нос, рот, усы (v2.0.0). */
 function Face({
-  hx, hy, hr, st, type, belly, s, sleeping,
+  hx, hy, hr, st, type, belly, s, sleeping, body,
 }: {
   hx: number; hy: number; hr: number;
-  st: SpeciesStyle; type: PetType; belly: string; s: number; sleeping: boolean;
+  st: SpeciesStyle; type: PetType; belly: string; s: number; sleeping: boolean; body: string;
 }) {
   const muzzle = st.muzzle ?? "smile";
-  const eyeDX = hr * 0.38;
-  const eyeY = hy - hr * 0.06;
-  const ink = "#4A3B2A";
+  const ex = hx + hr * 0.36;
+  const ey = hy - hr * 0.08;
+  const ink = "#3A3A3A";
   return (
     <g>
-      {/* Глаза (мигают CSS-классом, когда не спим) */}
+      {/* Один глаз — как у настоящего зверя в профиль */}
       {sleeping ? (
-        <g stroke={ink} strokeWidth={2.3} strokeLinecap="round">
-          <line x1={hx - eyeDX - hr * 0.2} y1={eyeY} x2={hx - eyeDX + hr * 0.2} y2={eyeY} />
-          <line x1={hx + eyeDX - hr * 0.2} y1={eyeY} x2={hx + eyeDX + hr * 0.2} y2={eyeY} />
-        </g>
+        <path
+          d={`M ${ex - hr * 0.2} ${ey + hr * 0.06} Q ${ex} ${ey + hr * 0.18} ${ex + hr * 0.2} ${ey + hr * 0.06}`}
+          stroke={ink} strokeWidth={2.4} strokeLinecap="round" fill="none"
+        />
       ) : (
         <g className="ttg-blink">
-          {[-1, 1].map((d) => (
-            <g key={d}>
-              <circle cx={hx + d * eyeDX} cy={eyeY} r={hr * 0.3} fill="#FFFFFF" />
-              <circle cx={hx + d * eyeDX + hr * 0.08} cy={eyeY + hr * 0.05} r={hr * 0.15} fill="#33261A" />
-              <circle cx={hx + d * eyeDX + hr * 0.14} cy={eyeY - hr * 0.08} r={hr * 0.05} fill="#FFFFFF" />
-            </g>
-          ))}
+          <circle cx={ex} cy={ey} r={hr * 0.27} fill="#FFFFFF" />
+          <circle cx={ex + hr * 0.06} cy={ey + hr * 0.01} r={hr * 0.155} fill="#33261A" />
+          <circle cx={ex + hr * 0.13} cy={ey - hr * 0.09} r={hr * 0.055} fill="#FFFFFF" />
         </g>
       )}
-      {/* Румянец */}
-      <g fill="#FF8FA3" opacity="0.5">
-        <circle cx={hx - hr * 0.72} cy={hy + hr * 0.3} r={hr * 0.2} />
-        <circle cx={hx + hr * 0.05} cy={hy + hr * 0.42} r={hr * 0.18} />
-      </g>
-      {/* Морда */}
+      {/* Румянец на щеке */}
+      <circle cx={hx - hr * 0.3} cy={hy + hr * 0.36} r={hr * 0.16} fill="#FF8FA3" opacity="0.45" />
+
       {muzzle === "beak" && (
-        <polygon
-          points={`${hx + hr * 0.35},${hy} ${hx + hr * 0.35},${hy + hr * 0.12} ${hx + hr * 0.95},${hy + hr * 0.06}`}
+        <path
+          d={`M ${hx + hr * 0.3} ${hy - hr * 0.02} L ${hx + hr * 0.3} ${hy + hr * 0.16} Q ${hx + hr * 0.55} ${hy + hr * 0.3} ${hx + hr * 1.02} ${hy + hr * 0.1} Z`}
           fill={BEAK}
         />
       )}
       {muzzle === "duckBeak" && (
-        <rect
-          x={hx + hr * 0.14}
-          y={hy - hr * 0.06}
-          width={hr * 0.95}
-          height={hr * 0.4}
-          rx={4 * s}
-          fill={BEAK}
-        />
+        <g>
+          <rect x={hx + hr * 0.12} y={hy - hr * 0.07} width={hr} height={hr * 0.42} rx={4 * s} fill={BEAK} />
+          <line x1={hx + hr * 0.3} y1={hy + hr * 0.14} x2={hx + hr * 1.08} y2={hy + hr * 0.1} stroke={ink} strokeOpacity="0.6" strokeWidth={1.6} strokeLinecap="round" />
+        </g>
       )}
       {muzzle === "bearMuzzle" && (
         <g>
-          <ellipse cx={hx + hr * 0.34} cy={hy + hr * 0.3} rx={hr * 0.48} ry={hr * 0.33} fill={belly} />
-          <circle cx={hx + hr * 0.42} cy={hy + hr * 0.16} r={hr * 0.13} fill={DARK} />
-          <path
-            d={`M ${hx + hr * 0.17} ${hy + hr * 0.38} A ${hr * 0.25} ${hr * 0.2} 0 0 0 ${hx + hr * 0.67} ${hy + hr * 0.38}`}
-            stroke={ink}
-            strokeWidth={2.2}
-            strokeLinecap="round"
-            fill="none"
-          />
+          <ellipse cx={hx + hr * 0.4} cy={hy + hr * 0.28} rx={hr * 0.475} ry={hr * 0.33} fill={belly} />
+          <circle cx={hx + hr * 0.62} cy={hy + hr * 0.06} r={hr * 0.125} fill={DARK} />
+          <path d={`M ${hx + hr * 0.39} ${hy + hr * 0.36} A ${hr * 0.25} ${hr * 0.2} 0 0 0 ${hx + hr * 0.65} ${hy + hr * 0.36}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
         </g>
       )}
       {muzzle === "buckteeth" && (
         <g>
-          <path
-            d={`M ${hx + hr * 0.09} ${hy + hr * 0.22} A ${hr * 0.31} ${hr * 0.23} 0 0 0 ${hx + hr * 0.71} ${hy + hr * 0.22}`}
-            stroke={ink}
-            strokeWidth={2.2}
-            strokeLinecap="round"
-            fill="none"
-          />
-          <rect x={hx + hr * 0.26} y={hy + hr * 0.3} width={hr * 0.16} height={hr * 0.24} rx={1.6} fill="#FFFFFF" />
-          <rect x={hx + hr * 0.46} y={hy + hr * 0.3} width={hr * 0.16} height={hr * 0.24} rx={1.6} fill="#FFFFFF" />
+          <path d={`M ${hx + hr * 0.11} ${hy + hr * 0.2} A ${hr * 0.31} ${hr * 0.23} 0 0 0 ${hx + hr * 0.73} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
+          <rect x={hx + hr * 0.34} y={hy + hr * 0.26} width={hr * 0.17} height={hr * 0.26} rx={1.6} fill="#FFFFFF" />
+          <rect x={hx + hr * 0.55} y={hy + hr * 0.24} width={hr * 0.17} height={hr * 0.26} rx={1.6} fill="#FFFFFF" />
         </g>
       )}
       {muzzle === "snout" && (
         <g>
-          <ellipse cx={hx + hr * 0.58} cy={hy + hr * 0.12} rx={hr * 0.3} ry={hr * 0.23} fill="#E88AA0" />
-          <circle cx={hx + hr * 0.5} cy={hy + hr * 0.12} r={hr * 0.07} fill={DARK} />
-          <circle cx={hx + hr * 0.68} cy={hy + hr * 0.12} r={hr * 0.07} fill={DARK} />
+          <ellipse cx={hx + hr * 0.66} cy={hy + hr * 0.14} rx={hr * 0.28} ry={hr * 0.25} fill="#E88AA0" />
+          <circle cx={hx + hr * 0.58} cy={hy + hr * 0.14} r={hr * 0.065} fill={DARK} />
+          <circle cx={hx + hr * 0.76} cy={hy + hr * 0.14} r={hr * 0.065} fill={DARK} />
+        </g>
+      )}
+      {muzzle === "foxMuzzle" && (
+        <g>
+          {/* Острая мордочка: клин к носу + светлая щёчка */}
+          <path
+            d={`M ${hx + hr * 0.05} ${hy - hr * 0.3} Q ${hx + hr * 0.55} ${hy - hr * 0.18} ${hx + hr * 1.06} ${hy + hr * 0.1} Q ${hx + hr * 0.55} ${hy + hr * 0.42} ${hx + hr * 0.1} ${hy + hr * 0.34} Z`}
+            fill={body}
+          />
+          <path
+            d={`M ${hx + hr * 0.3} ${hy + hr * 0.08} Q ${hx + hr * 0.62} ${hy + hr * 0.12} ${hx + hr * 0.96} ${hy + hr * 0.14} Q ${hx + hr * 0.58} ${hy + hr * 0.34} ${hx + hr * 0.22} ${hy + hr * 0.3} Z`}
+            fill="#FFFFFF" opacity="0.85"
+          />
+          <circle cx={hx + hr} cy={hy + hr * 0.06} r={hr * 0.085} fill={DARK} />
+          <path d={`M ${hx + hr * 0.61} ${hy + hr * 0.16} A ${hr * 0.18} ${hr * 0.14} 0 0 0 ${hx + hr * 0.83} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
+        </g>
+      )}
+      {muzzle === "catMuzzle" && (
+        <g>
+          <ellipse cx={hx + hr * 0.42} cy={hy + hr * 0.24} rx={hr * 0.36} ry={hr * 0.28} fill={belly} />
+          <polygon points={`${hx + hr * 0.52},${hy + hr * 0.08} ${hx + hr * 0.66},${hy + hr * 0.08} ${hx + hr * 0.59},${hy + hr * 0.18}`} fill={DARK} />
+          <path d={`M ${hx + hr * 0.32} ${hy + hr * 0.22} A ${hr * 0.15} ${hr * 0.12} 0 0 0 ${hx + hr * 0.62} ${hy + hr * 0.22}`} stroke={ink} strokeWidth={1.7} strokeLinecap="round" fill="none" />
+          <path d={`M ${hx + hr * 0.56} ${hy + hr * 0.22} A ${hr * 0.15} ${hr * 0.12} 0 0 1 ${hx + hr * 0.86} ${hy + hr * 0.22}`} stroke={ink} strokeWidth={1.7} strokeLinecap="round" fill="none" />
+          {[-0.04, 0.08, 0.2].map((dy) => (
+            <line key={dy} x1={hx + hr * 0.55} y1={hy + hr * (0.12 + dy)} x2={hx + hr * 1.15} y2={hy + hr * dy * 1.5} stroke="#6E645A" strokeOpacity="0.75" strokeWidth={1.3} strokeLinecap="round" />
+          ))}
+        </g>
+      )}
+      {muzzle === "longMuzzle" && (
+        <g>
+          <rect x={hx + hr * 0.1} y={hy - hr * 0.16} width={hr * 1.14} height={hr * 0.52} rx={hr * 0.26} fill={body} />
+          <circle cx={hx + hr * 1.16} cy={hy} r={hr * 0.1} fill={DARK} />
+          <path d={`M ${hx + hr * 0.65} ${hy + hr * 0.14} A ${hr * 0.25} ${hr * 0.2} 0 0 0 ${hx + hr * 0.91} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
         </g>
       )}
       {muzzle === "smile" && (
         <g>
-          <circle cx={hx + hr * 0.52} cy={hy + hr * 0.1} r={hr * 0.1} fill={DARK} />
-          <path
-            d={`M ${hx + hr * 0.14} ${hy + hr * 0.26} A ${hr * 0.28} ${hr * 0.2} 0 0 0 ${hx + hr * 0.7} ${hy + hr * 0.26}`}
-            stroke={ink}
-            strokeWidth={2.2}
-            strokeLinecap="round"
-            fill="none"
-          />
+          <circle cx={hx + hr * 0.55} cy={hy + hr * 0.06} r={hr * 0.1} fill={DARK} />
+          <path d={`M ${hx + hr * 0.17} ${hy + hr * 0.2} A ${hr * 0.28} ${hr * 0.2} 0 0 0 ${hx + hr * 0.73} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
         </g>
       )}
       {/* Усики тюленя */}
@@ -789,10 +878,8 @@ function Glasses({
   return null;
 }
 
-// __QUADS_MARKER__
-
 /** Зверь/птица/прыгун/водный житель — диспетчер по телосложению. */
-function Animal(props: AnimalProps) {
+function Animal(props: AnimalProps & { bhv: PetBehavior | null }) {
   const st = speciesStyle(props.type);
   const body = skinnedBodyColor(props.type, props.pet.skin);
   const belly = skinnedBellyColor(props.type, props.pet.skin);
@@ -810,213 +897,356 @@ function Animal(props: AnimalProps) {
   }
 }
 
-/** Четвероногий ходок: тело, 4 лапы с походкой, шея, голова. */
-function Quadruped({ s, type, st, body, belly, shade, sleeping, pet }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string }) {
+/** Силуэт настоящего четвероногого: грудь, холка, круп, поджарый живот. */
+function quadBodyPath(bw: number, bh: number): string {
+  const bx = (f: number) => (f * bw).toFixed(2);
+  const by = (f: number) => (f * bh).toFixed(2);
+  return [
+    `M ${bx(0.46)} ${by(0)}`,
+    `C ${bx(0.5)} ${by(-0.22)} ${bx(0.42)} ${by(-0.4)} ${bx(0.18)} ${by(-0.48)}`,
+    `C ${bx(0.06)} ${by(-0.52)} ${bx(-0.04)} ${by(-0.44)} ${bx(-0.14)} ${by(-0.47)}`,
+    `C ${bx(-0.26)} ${by(-0.52)} ${bx(-0.4)} ${by(-0.5)} ${bx(-0.47)} ${by(-0.3)}`,
+    `C ${bx(-0.52)} ${by(-0.12)} ${bx(-0.5)} ${by(0.12)} ${bx(-0.42)} ${by(0.28)}`,
+    `C ${bx(-0.32)} ${by(0.44)} ${bx(-0.08)} ${by(0.47)} ${bx(0.12)} ${by(0.42)}`,
+    `C ${bx(0.3)} ${by(0.38)} ${bx(0.42)} ${by(0.22)} ${bx(0.46)} ${by(0)}`,
+    "Z",
+  ].join(" ");
+}
+
+interface HeadGroupProps {
+  pivotX: number; pivotY: number;
+  neckAngle: number; reach: number; headTilt: number;
+  hr: number; bh: number;
+  st: SpeciesStyle; pet: Pet;
+  body: string; belly: string; s: number; sleeping: boolean;
+}
+
+/** Шея и голова: угол шеи, вытянутость и наклон морды независимы —
+ *  поэтому зверь умеет и бежать, и принюхиваться, и щипать траву. */
+function HeadGroupV2({
+  pivotX, pivotY, neckAngle, reach, headTilt, hr, bh, st, pet, body, belly, s, sleeping,
+}: HeadGroupProps) {
+  const dx = Math.sin(neckAngle);
+  const dy = -Math.cos(neckAngle);
+  const hx = pivotX + dx * reach;
+  const hy = pivotY + dy * reach;
+  const rot = ((neckAngle * 0.5 + headTilt) * 180) / Math.PI;
+  const midX = pivotX + dx * reach * 0.52 + bh * 0.12;
+  const midY = pivotY + dy * reach * 0.52;
+  return (
+    <g>
+      {reach > hr * 0.2 && (
+        <path
+          d={`M ${pivotX - bh * 0.1} ${pivotY + bh * 0.04} Q ${midX} ${midY} ${hx - hr * 0.15} ${hy + hr * 0.05}`}
+          stroke={body} strokeWidth={bh * 0.3} strokeLinecap="round" fill="none"
+        />
+      )}
+      <g transform={`translate(${hx} ${hy}) rotate(${rot})`}>
+        <circle r={hr} fill={body} />
+        <Ears hx={0} hy={0} hr={hr} st={st} body={body} belly={belly} s={s} />
+        <HeadDetails hx={0} hy={0} hr={hr} st={st} s={s} />
+        <Face hx={0} hy={0} hr={hr} st={st} type={pet.type} belly={belly} s={s} sleeping={sleeping} body={body} />
+        <Hat hx={0} hy={0} hr={hr} pet={pet} s={s} />
+        <Glasses hx={0} hy={0} hr={hr} pet={pet} hidden={sleeping} />
+      </g>
+      {(pet.neck === "scarf" || pet.neck === "bow") && (
+        <Neckwear nx={pivotX + dx * reach * 0.22} ny={pivotY + dy * reach * 0.22 + bh * 0.1} hr={hr} pet={pet} />
+      )}
+    </g>
+  );
+}
+
+/** Четвероногий ходок: настоящее тело, шея, голова, повадки (v2.0.0). */
+function Quadruped({ s, type, st, body, belly, shade, sleeping, pet, bhv }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string; bhv: PetBehavior | null }) {
   const bw = 78 * s * (st.bodyLen ?? 1);
   const bh = 46 * s;
   const legH = 26 * s * (st.legLen ?? 1);
   const hr = 15.5 * s * (st.headScale ?? 1);
-  const legW = 10.5 * s;
-  const half = WALK_DUR / 2;
+  const kind = sleeping ? "sleep" : (bhv?.kind ?? "walk");
+  const ease = sleeping ? 0 : (bhv?.poseEase ?? 0);
+  const legW = 9.5 * s;
 
-  if (sleeping) {
-    // Лёжа: тело распластано, голова впереди на земле, глазки закрыты.
-    const bodyCy = -bh * 0.36;
-    const headX = bw * 0.5;
-    const headY = -bh * 0.34;
+  const headGroup = (p: { pivotX: number; pivotY: number; neckAngle: number; reach: number; headTilt: number; eyesClosed: boolean }) => (
+    <HeadGroupV2
+      pivotX={p.pivotX} pivotY={p.pivotY}
+      neckAngle={p.neckAngle} reach={p.reach} headTilt={p.headTilt}
+      hr={hr} bh={bh} st={st} pet={pet} body={body} belly={belly} s={s} sleeping={p.eyesClosed}
+    />
+  );
+
+  if (kind === "sleep") {
+    // Лёжа: распластанное тело, морда на земле, глаза закрыты.
+    const bodyCy = -bh * 0.34;
     return (
       <g>
-        <TailQ ax={-bw * 0.46} ay={bodyCy} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag={false} />
-        <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh * 0.37} fill={body} />
-        <ellipse cx={-bw * 0.02} cy={bodyCy + bh * 0.14} rx={bw * 0.275} ry={bh * 0.18} fill={belly} />
+        <TailV2 ax={-bw * 0.46} ay={bodyCy} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag={false} s={s} />
+        <path d={quadBodyPath(bw, bh * 0.76)} transform={`translate(0 ${bodyCy})`} fill={body} />
+        <ellipse cx={-bw * 0.02} cy={bodyCy + bh * 0.12} rx={bw * 0.275} ry={bh * 0.15} fill={belly} />
         <BackDetails bodyCy={bodyCy} bw={bw} bh={bh} st={st} body={body} s={s} stage={3} />
-        <line x1={bw * 0.34} y1={bodyCy - bh * 0.12} x2={headX} y2={headY} stroke={body} strokeWidth={bh * 0.4} strokeLinecap="round" />
-        <circle cx={headX} cy={headY} r={hr} fill={body} />
-        <Ears hx={headX} hy={headY} hr={hr} st={st} body={body} belly={belly} s={s} />
-        <HeadDetails hx={headX} hy={headY} hr={hr} st={st} s={s} />
-        <Face hx={headX} hy={headY} hr={hr} st={st} type={type} belly={belly} s={s} sleeping />
-        <Hat hx={headX} hy={headY} hr={hr} pet={pet} s={s} />
-        <Glasses hx={headX} hy={headY} hr={hr} pet={pet} hidden />
+        {headGroup({ pivotX: bw * 0.32, pivotY: bodyCy - bh * 0.14, neckAngle: 0.62, reach: bh * 0.54, headTilt: 0.58, eyesClosed: true })}
       </g>
     );
   }
 
-  const bodyCy = -legH - bh * 0.46;
-  const headX = bw * 0.4;
-  const headY = bodyCy - bh * (0.14 + (st.neck ?? 0.3));
+  if (kind === "sit") {
+    // Сидит: круп на земле, грудь вверх, передние лапы прямые.
+    const haunchX = -bw * 0.14;
+    const haunchY = -bh * 0.4;
+    const tilt = -0.66;
+    const ct = Math.cos(tilt), stl = Math.sin(tilt);
+    const chestX = haunchX + bw * 0.42 * ct - -bh * 0.04 * stl;
+    const chestY = haunchY + bw * 0.42 * stl + -bh * 0.04 * ct;
+    return (
+      <g>
+        <TailV2 ax={-bw * 0.36} ay={-bh * 0.16} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag={false} wrap s={s} />
+        <ellipse cx={haunchX} cy={haunchY} rx={bw * 0.27} ry={bh * 0.46} fill={body} />
+        <ellipse cx={haunchX + bw * 0.12} cy={haunchY + bh * 0.2} rx={bw * 0.15} ry={bh * 0.17} fill={belly} />
+        <ellipse cx={-bw * 0.04} cy={-4 * s} rx={bw * 0.13} ry={4.25 * s} fill={shade} />
+        <g transform={`translate(${haunchX} ${haunchY}) rotate(${(tilt * 180) / Math.PI})`}>
+          <ellipse cx={bw * 0.2} cy={-bh * 0.02} rx={bw * 0.29} ry={bh * 0.39} fill={body} />
+          <ellipse cx={bw * 0.16} cy={bh * 0.14} rx={bw * 0.17} ry={bh * 0.14} fill={belly} />
+        </g>
+        <BackDetails bodyCy={haunchY - bh * 0.34} bw={bw * 0.6} bh={bh * 0.8} st={st} body={body} s={s} stage={Math.round((s - 0.55) / 0.22)} />
+        {/* Плечевой круг — прячет верх лап в груди */}
+        <circle cx={chestX} cy={chestY + bh * 0.04} r={bh * 0.16} fill={body} />
+        {[-5.5 * s, 5.5 * s].map((dx, i) => (
+          <g key={dx}>
+            <rect x={chestX + dx - 4.8 * s} y={chestY + bh * 0.02} width={9.6 * s} height={Math.max(4, -(chestY + bh * 0.02) - 1)} rx={4.8 * s} fill={i === 0 ? shade : body} />
+            <ellipse cx={chestX + dx + 3.2 * s} cy={-2.6 * s} rx={6.5 * s} ry={3.25 * s} fill={i === 0 ? shade : body} />
+          </g>
+        ))}
+        {headGroup({ pivotX: chestX + bw * 0.03, pivotY: chestY - bh * 0.24, neckAngle: 0.42, reach: bh * 0.55, headTilt: 0.06, eyesClosed: false })}
+      </g>
+    );
+  }
+
+  // Походка / принюхивание / пастьба.
+  const stride = bhv?.stride ?? 0;
+  const bob = Math.sin(stride * 2) * 1.7 * s * (bhv ? 1 - bhv.poseEase * 0.8 : 1);
+  const bodyCy = -legH - bh * 0.5 + bob;
+  const amp = 0.4;
+  const walkNeck = 0.1 + Math.sin(stride * 2) * 0.03;
+  let neckAngle = walkNeck;
+  let reachM = 1;
+  let headTilt = 0.03 + Math.sin(stride * 2 + 1) * 0.02;
+  if (ease > 0) {
+    let tAng = 0.9, tReach = 0.95, tTilt = 0.35;
+    if (kind === "graze") {
+      tAng = 1.95;
+      tReach = 1.06;
+      tTilt = 0.6 + Math.sin(Date.now() / 1000 * 9) * 0.05;
+    } else if (kind === "sniff") {
+      tAng = 0.92 + Math.sin(Date.now() / 1000 * 7) * 0.05;
+      tReach = 0.96;
+      tTilt = 0.36;
+    } else if (kind === "look") {
+      tAng = -0.1 + Math.sin(Date.now() / 1000 * 1.5) * 0.07;
+      tReach = 1;
+      tTilt = -0.04;
+    }
+    neckAngle = walkNeck + (tAng - walkNeck) * ease;
+    reachM = 1 + (tReach - 1) * ease;
+    headTilt = headTilt + (tTilt - headTilt) * ease;
+  }
+  const neckLen = bh * (0.22 + (st.neck ?? 0.3) * 0.55);
+  const pivotX = bw * 0.3;
+  const pivotY = bodyCy - bh * 0.06;
+
   return (
     <g>
-      {/* Дальняя пара лап (диагональ, темнее) */}
-      <LegQ hx={-bw * 0.25} hy={-legH} len={legH} w={legW} color={shade} phase={half} sleeping={sleeping} />
-      <LegQ hx={bw * 0.23} hy={-legH} len={legH} w={legW} color={shade} phase={0} sleeping={sleeping} />
-      {/* Хвост (виляет) */}
-      <TailQ ax={-bw * 0.46} ay={bodyCy} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag />
-      {/* Ближняя пара лап */}
-      <LegQ hx={-bw * 0.33} hy={-legH} len={legH} w={legW} color={body} phase={0} sleeping={sleeping} />
-      <LegQ hx={bw * 0.31} hy={-legH} len={legH} w={legW} color={body} phase={half} sleeping={sleeping} />
-      {/* Тело и животик */}
-      <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
-      <ellipse cx={0} cy={bodyCy + bh * 0.2} rx={bw * 0.29} ry={bh * 0.24} fill={belly} />
+      {/* Лапы: диагональная походка (дальняя пара темнее) */}
+      <LegV2 hx={bw * 0.3} hy={bodyCy + bh * 0.42} len={legH} w={legW} color={shade} swing={Math.sin(stride + Math.PI) * amp} />
+      <LegV2 hx={-bw * 0.28} hy={bodyCy + bh * 0.4} len={legH} w={legW * 1.21} color={shade} swing={Math.sin(stride + Math.PI) * amp} rear />
+      <LegV2 hx={bw * 0.3} hy={bodyCy + bh * 0.42} len={legH} w={legW} color={body} swing={Math.sin(stride) * amp} />
+      <LegV2 hx={-bw * 0.28} hy={bodyCy + bh * 0.4} len={legH} w={legW * 1.21} color={body} swing={Math.sin(stride) * amp} rear />
+      {/* Хвост виляет на ходу */}
+      <TailV2 ax={-bw * 0.44} ay={bodyCy - bh * 0.06} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag s={s} />
+      {/* Тело настоящего зверя */}
+      <path d={quadBodyPath(bw, bh)} transform={`translate(0 ${bodyCy})`} fill={body} />
+      {/* Бедро — объём задней половины */}
+      <ellipse cx={-bw * 0.27} cy={bodyCy + bh * 0.02} rx={bw * 0.2} ry={bh * 0.4} fill={shade} opacity={0.55} />
+      {/* Животик */}
+      <ellipse cx={bw * 0.04} cy={bodyCy + bh * 0.3} rx={bw * 0.31} ry={bh * 0.17} fill={belly} />
       <BackDetails bodyCy={bodyCy} bw={bw} bh={bh} st={st} body={body} s={s} stage={Math.round((s - 0.55) / 0.22)} />
-      {/* Грива единорога */}
-      {st.extra === "mane" && <Mane bodyCy={bodyCy} headX={headX} headY={headY} s={s} />}
-      {/* Шея */}
-      {(st.neck ?? 0.3) > 0.16 && (
-        <line
-          x1={bw * 0.3} y1={bodyCy - bh * 0.16}
-          x2={headX - hr * 0.1} y2={headY + hr * 0.5}
-          stroke={body} strokeWidth={bh * 0.4} strokeLinecap="round"
-        />
+      {/* Грива единорога вдоль шеи */}
+      {st.extra === "mane" && (
+        <Mane bodyCy={pivotY} headX={pivotX + Math.sin(neckAngle) * neckLen * reachM} headY={pivotY - Math.cos(neckAngle) * neckLen * reachM} s={s} />
       )}
-      {/* Голова */}
-      <circle cx={headX} cy={headY} r={hr} fill={body} />
-      <Ears hx={headX} hy={headY} hr={hr} st={st} body={body} belly={belly} s={s} />
-      <HeadDetails hx={headX} hy={headY} hr={hr} st={st} s={s} />
-      <Face hx={headX} hy={headY} hr={hr} st={st} type={type} belly={belly} s={s} sleeping={sleeping} />
-      <Hat hx={headX} hy={headY} hr={hr} pet={pet} s={s} />
-      <Neckwear nx={headX - hr * 0.2} ny={headY + hr * 0.95} hr={hr} pet={pet} />
-      <Glasses hx={headX} hy={headY} hr={hr} pet={pet} hidden={false} />
+      {headGroup({
+        pivotX, pivotY,
+        neckAngle, reach: neckLen * reachM, headTilt,
+        eyesClosed: false,
+      })}
     </g>
   );
 }
 
-/** Птица: две лапки, вертикальное тело, голова сверху, переваливается. */
-function Bird({ s, type, st, body, belly, shade, sleeping, pet }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string }) {
+/** Птица: две лапки с коленчиком, грушевидное тело, клюв (v2.0.0). */
+function Bird({ s, type, st, body, belly, shade, sleeping, pet, bhv }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string; bhv: PetBehavior | null }) {
   const bw = 40 * s;
   const bh = 56 * s * (st.bodyLen ?? 1);
   const legH = 16 * s;
   const hr = 14.5 * s * (st.headScale ?? 1);
-  const sit = sleeping ? legH * 0.35 : legH;
-  const bodyCy = -sit - bh * 0.46;
-  const headX = bw * 0.06;
-  const headY = bodyCy - bh * 0.5 - hr * 0.62;
+  const kind = sleeping ? "sleep" : (bhv?.kind ?? "walk");
+  const stride = bhv?.stride ?? 0;
+  const sit = kind === "sleep" ? legH * 0.35 : legH;
+  const bodyCy = -sit - bh * 0.44;
+
+  const walkTilt = kind === "walk" ? Math.sin(stride) * 3 : 0;
+
+  // Голова с наклоном: на паузе птица клюёт зёрнышки.
+  const pitch = bhv?.headPitch ?? 0;
+  const pivotX = bw * 0.1;
+  const pivotY = bodyCy - bh * 0.44;
+  const neckLen = bh * 0.26;
+  const headX = pivotX + Math.sin(pitch * 1.35) * neckLen;
+  const headY = pivotY - Math.cos(pitch * 1.35) * neckLen;
+  const headRot = (pitch * 0.9 * 180) / Math.PI;
 
   return (
     <g>
-      {!sleeping && (
-        <animateTransform
-          attributeName="transform" type="rotate"
-          values="-3;3;-3" keyTimes="0;0.5;1" calcMode="linear"
-          dur={`${WALK_DUR}s`} repeatCount="indefinite"
+      <g transform={walkTilt ? `rotate(${walkTilt} 0 0)` : undefined}>
+        {/* Лапки с коленчиком */}
+        {[-1, 1].map((d) => {
+          const swing = kind === "sleep" ? 0 : Math.sin(stride + (d > 0 ? 0 : Math.PI)) * 0.32;
+          return (
+            <g key={d} transform={`translate(${d * bw * 0.14} ${-sit}) rotate(${(swing * 180) / Math.PI})`}>
+              <line x1={0} y1={0} x2={0} y2={sit * 0.62} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
+              <line x1={0} y1={sit * 0.62} x2={2 * s} y2={sit} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
+              <line x1={2 * s} y1={sit} x2={6.5 * s} y2={sit + 0.5} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
+              <line x1={2 * s} y1={sit} x2={-1.5 * s} y2={sit + 0.5} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
+            </g>
+          );
+        })}
+        {/* Хвост-веер из перьев */}
+        <polygon
+          points={`${-bw * 0.26},${bodyCy + bh * 0.22} ${-bw * 0.86},${bodyCy + bh * 0.3} ${-bw * 0.8},${bodyCy + bh * 0.42} ${-bw * 0.7},${bodyCy + bh * 0.36} ${-bw * 0.66},${bodyCy + bh * 0.5} ${-bw * 0.28},${bodyCy + bh * 0.44}`}
+          fill={shade}
         />
-      )}
-      {/* Лапки-палочки */}
-      {[-1, 1].map((d) => (
-        <g key={d} transform={`translate(${d * bw * 0.14} ${-sit})`}>
-          <g>
-            {!sleeping && (
-              <animateTransform
-                attributeName="transform" type="rotate"
-                values={`${d > 0 ? -12 : 12};${d > 0 ? 12 : -12};${d > 0 ? -12 : 12}`}
-                keyTimes="0;0.5;1" calcMode="linear"
-                dur={`${WALK_DUR}s`} begin={`${-WALK_DUR / 2}s`}
-                repeatCount="indefinite"
-              />
-            )}
-            <line x1={0} y1={0} x2={0} y2={sit} stroke={sleeping ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
-            <line x1={0} y1={sit} x2={5 * s} y2={sit + 1} stroke={sleeping ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
-          </g>
-        </g>
-      ))}
-      {/* Хвост-веер */}
-      <polygon
-        points={`${-bw * 0.3},${bodyCy + bh * 0.3} ${-bw * 0.78},${bodyCy + bh * 0.44} ${-bw * 0.32},${bodyCy + bh * 0.52}`}
-        fill={shade}
-      />
-      {/* Тело и животик */}
-      <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
-      <ellipse cx={bw * 0.08} cy={bodyCy + bh * 0.16} rx={bw * 0.29} ry={bh * 0.25} fill={belly} />
-      {/* Крылышко */}
-      <ellipse cx={-bw * 0.12} cy={bodyCy - bh * 0.02} rx={bw * 0.21} ry={bh * 0.23} fill={shade} />
+        {/* Тело-груша */}
+        <path
+          d={`M ${bw * 0.4} ${bodyCy - bh * 0.1} C ${bw * 0.44} ${bodyCy - bh * 0.4} ${bw * 0.1} ${bodyCy - bh * 0.52} ${-bw * 0.1} ${bodyCy - bh * 0.44} C ${-bw * 0.4} ${bodyCy - bh * 0.3} ${-bw * 0.44} ${bodyCy + bh * 0.16} ${-bw * 0.26} ${bodyCy + bh * 0.36} C ${-bw * 0.1} ${bodyCy + bh * 0.52} ${bw * 0.2} ${bodyCy + bh * 0.48} ${bw * 0.34} ${bodyCy + bh * 0.24} Z`}
+          fill={body}
+        />
+        <ellipse cx={bw * 0.1} cy={bodyCy + bh * 0.14} rx={bw * 0.27} ry={bh * 0.22} fill={belly} />
+        {/* Крылышко с пёрышками */}
+        <ellipse cx={-bw * 0.14} cy={bodyCy - bh * 0.02} rx={bw * 0.23} ry={bh * 0.21} fill={shade} />
+        <line x1={-bw * 0.1} y1={bodyCy + bh * 0.02} x2={-bw * 0.3} y2={bodyCy + bh * 0.16} stroke={shade} strokeWidth={1.6} strokeLinecap="round" />
+        <line x1={-bw * 0.08} y1={bodyCy + bh * 0.12} x2={-bw * 0.26} y2={bodyCy + bh * 0.26} stroke={shade} strokeWidth={1.6} strokeLinecap="round" />
+      </g>
       {/* Голова */}
-      <circle cx={headX} cy={headY} r={hr} fill={body} />
-      <Ears hx={headX} hy={headY} hr={hr} st={st} body={body} belly={belly} s={s} />
-      <HeadDetails hx={headX} hy={headY} hr={hr} st={st} s={s} />
-      <Face hx={headX} hy={headY} hr={hr} st={st} type={type} belly={belly} s={s} sleeping={sleeping} />
-      <Hat hx={headX} hy={headY} hr={hr} pet={pet} s={s} />
-      <Neckwear nx={bw * 0.04} ny={bodyCy - bh * 0.42} hr={hr} pet={pet} />
-      <Glasses hx={headX} hy={headY} hr={hr} pet={pet} hidden={sleeping} />
+      <g transform={`translate(${headX} ${headY}) rotate(${headRot})`}>
+        <circle r={hr} fill={body} />
+        <Ears hx={0} hy={0} hr={hr} st={st} body={body} belly={belly} s={s} />
+        <HeadDetails hx={0} hy={0} hr={hr} st={st} s={s} />
+        <Face hx={0} hy={0} hr={hr} st={st} type={type} belly={belly} s={s} sleeping={kind === "sleep"} body={body} />
+        <Hat hx={0} hy={0} hr={hr} pet={pet} s={s} />
+        <Glasses hx={0} hy={0} hr={hr} pet={pet} hidden={kind === "sleep"} />
+      </g>
+      {(pet.neck === "scarf" || pet.neck === "bow") && (
+        <Neckwear nx={bw * 0.06} ny={bodyCy - bh * 0.4} hr={hr} pet={pet} />
+      )}
     </g>
   );
 }
 
-/** Прыгун: зайчик и лягушонок. */
-function Hopper({ s, type, st, body, belly, shade, sleeping, pet }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string }) {
+/** Прыгуны: настоящий зайчик и лягушонок (v2.0.0). */
+function Hopper({ s, type, st, body, belly, shade, sleeping, pet, bhv }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string; bhv: PetBehavior | null }) {
   const bw = 58 * s * (st.bodyLen ?? 1);
   const bh = 46 * s;
-  const bodyCy = -bh * 0.5 - 4 * s;
+  const bodyCy = -bh * 0.48 - 4 * s;
+  const isFrog = (st.muzzle ?? "smile") === "topEyes";
+
+  if (isFrog) {
+    // Лягушонок: глаза-фонарики на макушке.
+    return (
+      <g>
+        {!sleeping && (
+          <animateTransform
+            attributeName="transform" type="translate"
+            values="0 0;0 -24;0 0;0 0"
+            keyTimes="0;0.2;0.4;1"
+            calcMode="spline"
+            keySplines="0.3 0 0.4 1;0.6 0 0.8 0.6;0 0 1 1"
+            dur="2.4s"
+            repeatCount="indefinite"
+          />
+        )}
+        <ellipse cx={-bw * 0.24} cy={-6 * s} rx={bw * 0.17} ry={bh * 0.12} fill={shade} />
+        <ellipse cx={-bw * 0.3} cy={-bh * 0.2} rx={bw * 0.21} ry={bh * 0.15} fill={shade} />
+        <ellipse cx={bw * 0.34} cy={-3 * s} rx={bw * 0.08} ry={bh * 0.07} fill={body} />
+        <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
+        <ellipse cx={bw * 0.06} cy={bodyCy + bh * 0.18} rx={bw * 0.26} ry={bh * 0.22} fill={belly} />
+        {[-0.22, 0.22].map((sx) => (
+          <g key={sx}>
+            <circle cx={bw * sx} cy={bodyCy - bh * 0.5} r={bh * 0.42 * 0.42} fill={body} />
+            {sleeping ? (
+              <line
+                x1={bw * sx - bh * 0.08} y1={bodyCy - bh * 0.51}
+                x2={bw * sx + bh * 0.08} y2={bodyCy - bh * 0.51}
+                stroke="#33261A" strokeWidth={2} strokeLinecap="round"
+              />
+            ) : (
+              <g className="ttg-blink">
+                <circle cx={bw * sx} cy={bodyCy - bh * 0.5 - 2 * s} r={bh * 0.42 * 0.3} fill="#FFFFFF" />
+                <circle cx={bw * sx} cy={bodyCy - bh * 0.5 - 1 * s} r={bh * 0.42 * 0.14} fill="#33261A" />
+              </g>
+            )}
+          </g>
+        ))}
+        <path
+          d={`M ${-bw * 0.24} ${bodyCy + bh * 0.08} A ${bw * 0.26} ${bh * 0.18} 0 0 0 ${bw * 0.28} ${bodyCy + bh * 0.08}`}
+          stroke="#4A3B2A" strokeWidth={2.4} strokeLinecap="round" fill="none"
+        />
+        <Hat hx={0} hy={bodyCy - bh * 0.86} hr={bh * 0.42} pet={pet} s={s} />
+        <Glasses hx={0} hy={bodyCy} hr={bh * 0.42} pet={pet} hidden={sleeping} />
+      </g>
+    );
+  }
+
+  // Настоящий зайчик: на паузе опускает голову к траве.
+  const ease = sleeping ? 0 : (bhv?.poseEase ?? 0);
+  const kind = bhv?.kind ?? "walk";
+  const drop = kind === "graze" || kind === "sniff" ? ease * bh * 0.22 : 0;
+  const hr = bh * 0.34;
+  const headX = bw * 0.4;
+  const headY = bodyCy - bh * 0.4 + drop;
 
   return (
     <g>
       {!sleeping && (
         <animateTransform
           attributeName="transform" type="translate"
-          values="0 0;0 -24;0 0;0 0"
-          keyTimes="0;0.2;0.4;1"
+          values="0 0;0 -26;0 0;0 0"
+          keyTimes="0;0.19;0.38;1"
           calcMode="spline"
           keySplines="0.3 0 0.4 1;0.6 0 0.8 0.6;0 0 1 1"
-          dur="2.4s"
+          dur="2.35s"
           repeatCount="indefinite"
         />
       )}
-      {/* Задние лапки-пружинки */}
-      <ellipse cx={-bw * 0.24} cy={-6 * s} rx={bw * 0.17} ry={bh * 0.12} fill={shade} />
-      <ellipse cx={-bw * 0.3} cy={-bh * 0.2} rx={bw * 0.21} ry={bh * 0.15} fill={shade} />
+      {/* Пушистый хвостик */}
+      <circle cx={-bw * 0.4} cy={bodyCy + bh * 0.1} r={7 * s} fill="#FFFFFF" opacity="0.9" />
+      {/* Заднее бедро и ступня */}
+      <ellipse cx={-bw * 0.14} cy={bodyCy + bh * 0.16} rx={bw * 0.18} ry={bh * 0.22} fill={shade} />
+      <ellipse cx={bw * 0.02} cy={-6 * s} rx={bw * 0.17} ry={4.25 * s} fill={shade} />
       {/* Передние лапки */}
-      <ellipse cx={bw * 0.34} cy={-3 * s} rx={bw * 0.08} ry={bh * 0.07} fill={body} />
-      {/* Хвост-помпон зайчика */}
-      {type === "bunny" && (
-        <circle cx={-bw * 0.5} cy={bodyCy + bh * 0.1} r={bw * 0.1} fill="#FFFFFF" opacity="0.85" />
-      )}
-      {/* Тело и животик */}
-      <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
-      <ellipse cx={bw * 0.06} cy={bodyCy + bh * 0.18} rx={bw * 0.26} ry={bh * 0.22} fill={belly} />
-
-      {(st.muzzle ?? "smile") === "topEyes" ? (
-        <g>
-          {/* Лягушонок: глаза-фонарики на макушке */}
-          {[-0.22, 0.22].map((sx) => (
-            <g key={sx}>
-              <circle cx={bw * sx} cy={bodyCy - bh * 0.5} r={bh * 0.42 * 0.42} fill={body} />
-              {sleeping ? (
-                <line
-                  x1={bw * sx - bh * 0.08} y1={bodyCy - bh * 0.51}
-                  x2={bw * sx + bh * 0.08} y2={bodyCy - bh * 0.51}
-                  stroke="#33261A" strokeWidth={2} strokeLinecap="round"
-                />
-              ) : (
-                <g className="ttg-blink">
-                  <circle cx={bw * sx} cy={bodyCy - bh * 0.5 - 2 * s} r={bh * 0.42 * 0.3} fill="#FFFFFF" />
-                  <circle cx={bw * sx} cy={bodyCy - bh * 0.5 - 1 * s} r={bh * 0.42 * 0.14} fill="#33261A" />
-                </g>
-              )}
-            </g>
-          ))}
-          <path
-            d={`M ${-bw * 0.24} ${bodyCy + bh * 0.08} A ${bw * 0.26} ${bh * 0.18} 0 0 0 ${bw * 0.28} ${bodyCy + bh * 0.08}`}
-            stroke="#4A3B2A" strokeWidth={2.4} strokeLinecap="round" fill="none"
-          />
-          <Hat hx={0} hy={bodyCy - bh * 0.86} hr={bh * 0.42} pet={pet} s={s} />
-          <Glasses hx={0} hy={bodyCy} hr={bh * 0.42} pet={pet} hidden={sleeping} />
-        </g>
-      ) : (
-        (() => {
-          // Зайчик: голова спереди-сверху
-          const hr = bh * 0.42;
-          const headX = bw * 0.4;
-          const headY = bodyCy - bh * 0.38;
-          return (
-            <g>
-              <circle cx={headX} cy={headY} r={hr} fill={body} />
-              <Ears hx={headX} hy={headY} hr={hr} st={st} body={body} belly={belly} s={s} />
-              <HeadDetails hx={headX} hy={headY} hr={hr} st={st} s={s} />
-              <Face hx={headX} hy={headY} hr={hr} st={st} type={type} belly={belly} s={s} sleeping={sleeping} />
-              <Hat hx={headX} hy={headY} hr={hr} pet={pet} s={s} />
-              <Neckwear nx={bw * 0.34} ny={bodyCy - bh * 0.1} hr={hr} pet={pet} />
-              <Glasses hx={headX} hy={headY} hr={hr} pet={pet} hidden={sleeping} />
-            </g>
-          );
-        })()
+      <ellipse cx={bw * 0.3} cy={-5 * s} rx={bw * 0.075} ry={3.75 * s} fill={body} />
+      {/* Тело-капля: круп выше, грудь вперёд */}
+      <path
+        d={`M ${bw * 0.42} ${bodyCy - bh * 0.02} C ${bw * 0.46} ${bodyCy - bh * 0.34} ${bw * 0.16} ${bodyCy - bh * 0.55} ${-bw * 0.08} ${bodyCy - bh * 0.5} C ${-bw * 0.36} ${bodyCy - bh * 0.44} ${-bw * 0.48} ${bodyCy - bh * 0.1} ${-bw * 0.44} ${bodyCy + bh * 0.14} C ${-bw * 0.38} ${bodyCy + bh * 0.4} ${bw * 0.1} ${bodyCy + bh * 0.46} ${bw * 0.28} ${bodyCy + bh * 0.24} Z`}
+        fill={body}
+      />
+      <ellipse cx={bw * 0.02} cy={bodyCy + bh * 0.2} rx={bw * 0.25} ry={bh * 0.15} fill={belly} />
+      {/* Голова */}
+      <circle cx={headX} cy={headY} r={hr} fill={body} />
+      <Ears hx={headX} hy={headY} hr={hr} st={st} body={body} belly={belly} s={s} />
+      <HeadDetails hx={headX} hy={headY} hr={hr} st={st} s={s} />
+      <Face hx={headX} hy={headY} hr={hr} st={st} type={type} belly={belly} s={s} sleeping={sleeping} body={body} />
+      <Hat hx={headX} hy={headY} hr={hr} pet={pet} s={s} />
+      <Glasses hx={headX} hy={headY} hr={hr} pet={pet} hidden={sleeping} />
+      {(pet.neck === "scarf" || pet.neck === "bow") && (
+        <Neckwear nx={headX - bh * 0.26} ny={headY + bh * 0.34} hr={hr} pet={pet} />
       )}
     </g>
   );
@@ -1169,11 +1399,14 @@ function PetFigure({
   const isLast = index === total - 1;
   const aquatic = isAquatic(pet.type);
   const plant = isPlant(pet.type);
+  const walkable = stage > 0 && !plant && !aquatic;
+
+  // v2.0.0: движок повадок — гуляет, принюхивается, щиплет траву, сидит.
+  const bhv = useBehavior(pet, walkable && !sleeping);
 
   // Водные питомцы живут в пруду по центру; остальные — на лужайке.
-  const x = pondActive && aquatic ? 200 : 400 * (total === 1 ? 0.5 : 0.18 + (0.64 * index) / Math.max(1, total - 1));
+  const x = pondActive && aquatic ? 200 : walkable && !sleeping ? 400 * (0.16 + 0.68 * (bhv?.x ?? 0.5)) : 400 * (total === 1 ? 0.5 : 0.18 + (0.64 * index) / Math.max(1, total - 1));
   const y = aquatic ? GROUND_Y + 24 : GROUND_Y;
-  const walkable = stage > 0 && !plant && !aquatic;
 
   // Искусство питомца (общее для сна и ходьбы).
   const art =
@@ -1186,7 +1419,7 @@ function PetFigure({
     ) : plant ? (
       <Plant s={s} type={pet.type} sleeping={sleeping} />
     ) : (
-      <Animal s={s} type={pet.type} sleeping={sleeping} pet={pet} />
+      <Animal s={s} type={pet.type} sleeping={sleeping} pet={pet} bhv={bhv} />
     );
 
   return (
@@ -1196,11 +1429,11 @@ function PetFigure({
           {art}
         </g>
       ) : walkable && !sleeping ? (
-        /* v1.9.0: звери гуляют по лужайке (тень едет вместе с питомцем). */
-        <Pace delay={index * 3.1 + 1.4}>
+        /* v2.0.0: зверь идёт в свою сторону (разворот по повадкам). */
+        <g transform={`scale(${bhv?.facing ?? 1} 1)`}>
           <ellipse cx={0} cy={3} rx={38 * s} ry={5.5 * s} fill="#000000" opacity="0.08" />
           {art}
-        </Pace>
+        </g>
       ) : (
         <g className="ttg-bob-sleep" style={{ animationDelay: `${-index * 0.7}s` }}>
           {stage > 0 && !plant && (
@@ -1364,6 +1597,41 @@ export function PetScene({
         </g>
       ))}
 
+      {/* Трава пучками — качается на ветру (v2.0.0) */}
+      {[
+        { x: 22, y: 209, h: 15 },
+        { x: 74, y: 200, h: 19 },
+        { x: 142, y: 212, h: 13 },
+        { x: 206, y: 222, h: 18 },
+        { x: 262, y: 205, h: 15 },
+        { x: 326, y: 214, h: 19 },
+        { x: 386, y: 200, h: 13 },
+      ].map((g, i) => (
+        <g
+          key={i}
+          className="ttg-sway"
+          style={{
+            animationDuration: `${3.2 + (i % 3) * 0.7}s`,
+            animationDelay: `${-i * 0.9}s`,
+            transformBox: "fill-box",
+            transformOrigin: "50% 100%",
+          }}
+        >
+          <path
+            d={[-5, -1.5, 2.5, 6]
+              .map(
+                (dx) =>
+                  `M ${g.x + dx} ${g.y} Q ${g.x + dx} ${g.y - g.h * 0.6} ${g.x + dx + dx * 0.35} ${g.y - g.h}`,
+              )
+              .join(" ")}
+            stroke={i % 2 ? "#6FBC5E" : "#5FA852"}
+            strokeWidth="2.2"
+            fill="none"
+            strokeLinecap="round"
+          />
+        </g>
+      ))}
+
       {/* Пруд для водных питомцев (v1.8.0) */}
       {hasPond && (
         <g>
@@ -1416,6 +1684,38 @@ export function PetScene({
       )}
 
       <WeatherLayers weather={weather} />
+
+      {/* Бабочки порхают над лужайкой (v2.0.0) */}
+      {!sleeping && weather !== "thunder" && weather !== "rain" && (
+        <>
+          <g className="ttg-fly" style={{ animationDuration: "17s" }}>
+            <g className="ttg-fly-bob" style={{ animationDuration: "3.1s" }}>
+              <g transform="translate(0 82)">
+                <g className="ttg-flap" style={{ animationDuration: "0.42s" }}>
+                  <ellipse cx={-4} cy={-1.6} rx={3.6} ry={2.5} fill="#FF9F45" />
+                  <ellipse cx={4} cy={-1.6} rx={3.6} ry={2.5} fill="#FF9F45" />
+                  <ellipse cx={-3} cy={2} rx={2.2} ry={1.6} fill="#FFD166" />
+                  <ellipse cx={3} cy={2} rx={2.2} ry={1.6} fill="#FFD166" />
+                </g>
+                <line x1={0} y1={-2.6} x2={0} y2={3.4} stroke="#5A4632" strokeWidth={1.6} strokeLinecap="round" />
+              </g>
+            </g>
+          </g>
+          <g className="ttg-fly" style={{ animationDuration: "23s", animationDelay: "-9s" }}>
+            <g className="ttg-fly-bob" style={{ animationDuration: "2.6s", animationDelay: "-1.2s" }}>
+              <g transform="translate(0 96)">
+                <g className="ttg-flap" style={{ animationDuration: "0.5s", animationDelay: "-0.2s" }}>
+                  <ellipse cx={-4.6} cy={-1.8} rx={4.1} ry={2.9} fill="#B892E0" />
+                  <ellipse cx={4.6} cy={-1.8} rx={4.1} ry={2.9} fill="#B892E0" />
+                  <ellipse cx={-3.4} cy={2.2} rx={2.5} ry={1.8} fill="#8FBFF2" />
+                  <ellipse cx={3.4} cy={2.2} rx={2.5} ry={1.8} fill="#8FBFF2" />
+                </g>
+                <line x1={0} y1={-3} x2={0} y2={3.8} stroke="#5A4632" strokeWidth={1.6} strokeLinecap="round" />
+              </g>
+            </g>
+          </g>
+        </>
+      )}
 
       {/* Декоративная рамка из магазина (v1.5.0) */}
       {frameColor && (

@@ -257,7 +257,7 @@ export const PET_CATALOG: {
   { name: "Росточек", type: "sprout", emoji: "🌱", desc: "Самый первый друг — символ «Ростка»", accusative: "Росточек" },
 ];
 
-export const K_APP_VERSION = "2.0.0";
+export const K_APP_VERSION = "2.1.0";
 export const K_APP_BUILD_NUMBER = 10;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
@@ -329,7 +329,10 @@ export interface SpeciesStyle {
     | "buckteeth"
     | "whaleMouth"
     | "topEyes"
-    | "snout";
+    | "snout"
+    | "foxMuzzle"
+    | "catMuzzle"
+    | "longMuzzle";
   extra?:
     | "none"
     | "spikes"
@@ -352,20 +355,20 @@ export interface SpeciesStyle {
 
 const SPECIES_STYLES: Record<PetType, SpeciesStyle> = {
   // ── Четвероногие ходоки ──
-  fox: { body: "#FF9F45", ear: "triangle", tail: "bushy", extra: "spots" },
-  cat: { body: "#A8B8C8", ear: "triangle", tail: "thin", bodyLen: 0.92 },
+  fox: { body: "#FF9F45", ear: "triangle", tail: "bushy", muzzle: "foxMuzzle", extra: "spots" },
+  cat: { body: "#A8B8C8", ear: "triangle", tail: "thin", muzzle: "catMuzzle", bodyLen: 0.92 },
   dragon: { body: "#62C46A", belly: "#D9F2DC", ear: "horns", extra: "wings", neck: 0.42 },
   bunny: { body: "#D9CFC4", belly: "#F7F1EA", ear: "long", muzzle: "buckteeth", build: "hop", bodyLen: 0.88 },
-  hedgehog: { body: "#C08552", belly: "#F0DCBE", ear: "round", extra: "spikes", bodyLen: 0.94 },
+  hedgehog: { body: "#C08552", belly: "#F0DCBE", ear: "round", muzzle: "foxMuzzle", extra: "spikes", bodyLen: 0.94 },
   panda: { body: "#F2EEE4", ear: "pom", extra: "patches", whiteBelly: true, bodyLen: 1.12, legLen: 0.86 },
   bear: { body: "#A9744F", ear: "round", muzzle: "bearMuzzle", bodyLen: 1.14, legLen: 0.9 },
   dog: { body: "#F2C078", belly: "#FBE8C8", ear: "triangle", tail: "bushy", muzzle: "bearMuzzle" },
-  deer: { body: "#D9A06C", belly: "#F7E7D2", ear: "round", extra: "antler", muzzle: "smile", neck: 0.72, legLen: 1.18 },
-  squirrel: { body: "#C97B4A", belly: "#F4E3D2", ear: "tuft", tail: "bushy", bodyLen: 0.9 },
-  raccoon: { body: "#9AA3AC", belly: "#E5E9ED", ear: "triangle", extra: "mask" },
+  deer: { body: "#D9A06C", belly: "#F7E7D2", ear: "round", extra: "antler", muzzle: "longMuzzle", neck: 0.72, legLen: 1.18 },
+  squirrel: { body: "#C97B4A", belly: "#F4E3D2", ear: "tuft", tail: "bushy", muzzle: "foxMuzzle", bodyLen: 0.9 },
+  raccoon: { body: "#9AA3AC", belly: "#E5E9ED", ear: "triangle", muzzle: "foxMuzzle", extra: "mask" },
   koala: { body: "#B5C4CE", belly: "#E9EFF3", ear: "pom", muzzle: "bearMuzzle", legLen: 0.8 },
   pig: { body: "#F5A8B8", belly: "#FDE3E9", ear: "triangle", tail: "curl", muzzle: "snout", bodyLen: 1.16, legLen: 0.78 },
-  unicorn: { body: "#F3EAFB", ear: "triangle", extra: "mane", whiteBelly: true, neck: 0.72, legLen: 1.15 },
+  unicorn: { body: "#F3EAFB", ear: "triangle", extra: "mane", muzzle: "longMuzzle", whiteBelly: true, neck: 0.72, legLen: 1.15 },
   // ── Птицы (две лапы) ──
   owl: { body: "#A97FE0", belly: "#EFE3FB", ear: "tuft", muzzle: "beak", build: "bird", headScale: 1.25 },
   duck: { body: "#FFD24C", ear: "tuft", muzzle: "duckBeak", build: "bird" },

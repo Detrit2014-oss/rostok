@@ -227,3 +227,38 @@
   transform-origin: center;
   animation: ttg-blink 4.2s linear infinite;
 }
+
+/* ── v2.0.0 «Настоящие звери»: бабочки и трава ── */
+@keyframes ttg-fly {
+  0% { transform: translate(52px, 0); }
+  100% { transform: translate(348px, 0); }
+}
+.ttg-fly {
+  animation: ttg-fly 18s ease-in-out infinite alternate;
+}
+
+@keyframes ttg-fly-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+.ttg-fly-bob {
+  animation: ttg-fly-bob 3s ease-in-out infinite;
+}
+
+@keyframes ttg-flap {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.35); }
+}
+.ttg-flap {
+  animation: ttg-flap 0.45s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes ttg-sway {
+  0%, 100% { transform: rotate(-2.6deg); }
+  50% { transform: rotate(2.6deg); }
+}
+.ttg-sway {
+  animation: ttg-sway 3.4s ease-in-out infinite;
+}

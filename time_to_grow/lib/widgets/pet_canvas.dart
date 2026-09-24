@@ -8,9 +8,11 @@ import '../models/pet.dart';
 /// Анимированная сцена «Ростка»: небо, солнце, облака, лужайка, погода
 /// (v1.7.0) и питомцы, нарисованные полностью процедурно (CustomPaint).
 ///
-/// v1.9.0: звери ходят по лужайке как настоящие — голова на шее,
-/// горизонтальное тело на четырёх лапах с чередующейся походкой,
-/// птицы семенят на двух лапах, зайчик и лягушонок прыгают.
+/// v2.0.0 «Настоящие звери»: анатомия в профиль — силуэт тела с грудью,
+/// холкой и крупом, лопатка/бедро, лапы с коленом, шея с углом наклона,
+/// один глаз как у настоящего зверя. И НАСТОЯЩИЕ ПОВАДКИ: зверь гуляет,
+/// потом останавливается принюхаться, пощипать траву, сесть или
+/// поклевать зёрнышки. Птицы клюют, зайчик прыгает, бабочки порхают.
 /// Растения всходят из семечка (грядки), а не из яйца.
 /// Гардероб: шапки, шарфы, очки и окрасы рисуются прямо на питомце.
 class PetCanvas extends StatefulWidget {
@@ -42,6 +44,15 @@ class _PetCanvasState extends State<PetCanvas>
   late final AnimationController _phase =
       AnimationController(vsync: this, duration: const Duration(seconds: 4))
         ..repeat();
+  int _cycle = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _phase.addStatusListener((AnimationStatus status) {
+      if (status == AnimationStatus.completed) _cycle++;
+    });
+  }
 
   @override
   void dispose() {
@@ -59,6 +70,7 @@ class _PetCanvasState extends State<PetCanvas>
           painter: _PetScenePainter(
             pets: widget.pets,
             phase: _phase.value,
+            tSec: (_cycle + _phase.value) * 4.0,
             sleeping: widget.sleeping,
             weather: widget.weather,
             frame: widget.frame,
@@ -69,10 +81,161 @@ class _PetCanvasState extends State<PetCanvas>
   }
 }
 
+/// ── Повадки настоящих зверей (v2.0.0) ─────────────────────────────────
+/// Зверь гуляет по лужайке, а каждые ~21 с останавливается и ведёт себя
+/// как живой: принюхивается, щиплет траву, сидит или клюёт зёрнышки.
+/// Всё детерминировано (tSec + id питомца), поэтому Flutter и демо
+/// рисуют одинаковые сцены.
+class PetBehavior {
+  const PetBehavior({
+    required this.x,
+    required this.facing,
+    required this.kind,
+    required this.headPitch,
+    required this.stride,
+    required this.poseEase,
+  });
+
+  /// Позиция на лужайке, 0..1.
+  final double x;
+
+  /// 1 — идёт вправо, -1 — влево.
+  final double facing;
+
+  /// walk | sniff | graze | sit | peck | look.
+  final String kind;
+
+  /// Наклон головы вниз, рад (0 — смотрит вперёд).
+  final double headPitch;
+
+  /// Фаза шага, рад — на паузе замирает вместе с лапами.
+  final double stride;
+
+  /// 0..1 — насколько зверь «вошёл» в позу (плавный вход/выход).
+  final double poseEase;
+
+  /// Амплитуда покачивания корпуса (на паузе зверь стоит смирно).
+  double get bob => 1.0 - poseEase * 0.8;
+}
+
+const double _kStrollPeriod = 21.0; // цикл «прогулка + пауза», с
+const double _kPauseAt = 13.5; // начало паузы внутри цикла
+const double _kPauseLen = 3.8; // длительность паузы, с
+const double _kCrossSec = 8.2; // полпути через лужайку, с
+
+double _pbHash(int a, int b) {
+  int h = (a * 374761393 + b * 668265263) & 0x7fffffff;
+  h = ((h ^ (h >> 13)) * 1274126177) & 0x7fffffff;
+  return ((h ^ (h >> 16)) & 0x7fffffff) / 0x7fffffff;
+}
+
+bool _pbIsGrazer(PetType t) => const <PetType>{
+      PetType.deer,
+      PetType.unicorn,
+      PetType.bunny,
+      PetType.squirrel,
+      PetType.pig,
+      PetType.koala,
+      PetType.panda,
+      PetType.dragon,
+      PetType.hedgehog,
+    }.contains(t);
+
+bool _pbIsPercher(PetType t) => const <PetType>{
+      PetType.fox,
+      PetType.cat,
+      PetType.dog,
+      PetType.raccoon,
+      PetType.bear,
+    }.contains(t);
+
+bool _pbIsPecker(PetType t) => const <PetType>{
+      PetType.owl,
+      PetType.duck,
+      PetType.chick,
+      PetType.penguin,
+    }.contains(t);
+
+PetBehavior _petBehavior(Pet pet, int index, double tSec) {
+  final int seed = pet.id.hashCode & 0x7fffffff;
+  final double off = (seed % 1900) / 100.0; // 0..19 с — у каждого своё
+  final double total = tSec + off;
+  final double local = total % _kStrollPeriod;
+  final int cycle = total ~/ _kStrollPeriod;
+
+  // «Чистое» время шага: паузы не двигают зверя и не качают лапы.
+  final double pauseDone = (total ~/ _kStrollPeriod) * _kPauseLen +
+      (local >= _kPauseAt
+          ? math.min(local - _kPauseAt, _kPauseLen)
+          : 0.0);
+  final double walkT = tSec - pauseDone;
+
+  final double tri = ((walkT + off) / _kCrossSec) % 2.0;
+  final double x = tri < 1.0 ? tri : 2.0 - tri;
+  final double facing = tri < 1.0 ? 1.0 : -1.0;
+  final double stride = (walkT + off) * 2 * math.pi / 0.8;
+
+  if (local < _kPauseAt || local >= _kPauseAt + _kPauseLen) {
+    return PetBehavior(
+      x: x,
+      facing: facing,
+      kind: 'walk',
+      headPitch: 0.05 + math.sin(stride * 2) * 0.03,
+      stride: stride,
+      poseEase: 0,
+    );
+  }
+
+  // Пауза: выбор повадки стабилен на весь цикл.
+  final double r = _pbHash(seed, cycle);
+  final String kind;
+  if (_pbIsPecker(pet.type)) {
+    kind = r < 0.62 ? 'peck' : 'look';
+  } else if (_pbIsPercher(pet.type)) {
+    kind = r < 0.40 ? 'sniff' : (r < 0.78 ? 'sit' : 'look');
+  } else if (_pbIsGrazer(pet.type)) {
+    kind = r < 0.55 ? 'graze' : (r < 0.85 ? 'sniff' : 'look');
+  } else {
+    kind = r < 0.5 ? 'sniff' : 'look';
+  }
+
+  // Плавный вход в позу и выход из неё.
+  final double tin = ((local - _kPauseAt) / 0.7).clamp(0.0, 1.0);
+  final double tout =
+      ((_kPauseAt + _kPauseLen - local) / 0.7).clamp(0.0, 1.0);
+  final double e = math.min(tin, tout);
+  final double ease = e * e * (3 - 2 * e); // smoothstep
+
+  double target;
+  switch (kind) {
+    case 'graze':
+      target = 1.0 + math.sin(tSec * 8.5) * 0.06; // щиплет траву
+      break;
+    case 'sniff':
+      target = 0.62 + math.sin(tSec * 7.0) * 0.07; // принюхивается
+      break;
+    case 'peck':
+      final double pp = ((local - _kPauseAt) / _kPauseLen * 3.0) % 1.0;
+      target = math.sin(pp * math.pi) * 0.85; // три клюочка
+      break;
+    default:
+      target = 0.10 + math.sin(tSec * 1.6) * 0.12; // осматривается
+  }
+  return PetBehavior(
+    x: x,
+    facing: facing,
+    kind: kind,
+    headPitch: target * ease,
+    stride: stride,
+    poseEase: ease,
+  );
+}
+
 class _PetScenePainter extends CustomPainter {
   _PetScenePainter({
     required this.pets,
     required this.phase,
+    required this.tSec,
     required this.sleeping,
     required this.weather,
     required this.frame,
@@ -80,6 +243,9 @@ class _PetScenePainter extends CustomPainter {
 
   final List<Pet> pets;
   final double phase;
+
+  /// Абсолютное время сцены, с — на нём построены повадки и мигание.
+  final double tSec;
   final bool sleeping;
   final String? weather;
   final String frame;
@@ -258,6 +424,39 @@ class _PetScenePainter extends CustomPainter {
           flowers[i], 4, Paint()..color = fColors[i % fColors.length]);
       canvas.drawCircle(flowers[i], 1.6, Paint()..color = Colors.white);
     }
+
+    // Трава пучками — лужайка живая (v2.0.0).
+    for (int i = 0; i < 7; i++) {
+      final double fx = size.width * (0.05 + 0.135 * i);
+      final double fy =
+          groundY + size.height * (0.035 + 0.05 * ((i * 7) % 3) / 3);
+      _paintGrassTuft(
+        canvas,
+        Offset(fx, fy),
+        13.0 + (i % 3) * 5.0,
+        math.sin(tSec * 1.8 + i * 1.7) * 2.6,
+        i.isEven ? const Color(0xFF5FA852) : const Color(0xFF6FBC5E),
+      );
+    }
+  }
+
+  /// Пучок травы, качается на ветру.
+  void _paintGrassTuft(
+      Canvas canvas, Offset base, double h, double sway, Color color) {
+    final Paint p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
+    for (final double dx in <double>[-5.0, -1.5, 2.5, 6.0]) {
+      canvas.drawPath(
+        Path()
+          ..moveTo(base.dx + dx, base.dy)
+          ..quadraticBezierTo(base.dx + dx + sway, base.dy - h * 0.6,
+              base.dx + dx + sway * 1.8 + dx * 0.35, base.dy - h),
+        p,
+      );
+    }
   }
 
   /// Пруд по центру лужайки (v1.8.0) — дом водных питомцев.
@@ -335,24 +534,19 @@ class _PetScenePainter extends CustomPainter {
 
     for (int i = 0; i < land.length; i++) {
       final Pet pet = land[i];
-      final double baseX;
-      final double facing;
       if (sleeping) {
         // Спят на своих местах.
-        baseX = size.width *
+        final double baseX = size.width *
             (land.length == 1 ? 0.5 : 0.14 + 0.72 * i / (land.length - 1));
-        facing = 1;
+        _paintLandPet(canvas, Offset(baseX, groundY), pet, i, 1, null);
       } else {
-        // v1.9.0: звери ГУЛЯЮТ по лужайке — треугольная волна туда-обратно.
-        final double speed = 0.14 + (i % 3) * 0.04;
-        final double t = (phase * speed + i * 0.41) % 2.0;
-        final double tri = t < 1.0 ? t : 2.0 - t;
-        final double minX = size.width * 0.16;
-        final double maxX = size.width * 0.84;
-        baseX = minX + (maxX - minX) * tri;
-        facing = t < 1.0 ? 1 : -1;
+        // v2.0.0: повадки — гуляет, потом пауза (принюхивается/щиплет
+        // траву/сидит/клюёт) по детерминированному расписанию.
+        final PetBehavior bhv = _petBehavior(pet, i, tSec);
+        final double baseX = size.width * (0.16 + 0.68 * bhv.x);
+        _paintLandPet(
+            canvas, Offset(baseX, groundY), pet, i, bhv.facing, bhv);
       }
-      _paintLandPet(canvas, Offset(baseX, groundY), pet, i, facing);
     }
 
     for (int i = 0; i < water.length; i++) {
@@ -366,11 +560,72 @@ class _PetScenePainter extends CustomPainter {
 
     // Передняя вода поверх водных питомцев — тела «погружены».
     if (water.isNotEmpty) _paintWaterFront(canvas, pondC, prw, prh);
+
+    // Бабочки порхают над лужайкой (v2.0.0).
+    _paintButterflies(canvas, size);
+  }
+
+  /// Две бабочки — поле живёт даже вокруг питомцев.
+  void _paintButterflies(Canvas canvas, Size size) {
+    if (sleeping || weather == 'thunder' || weather == 'rain') return;
+    for (int i = 0; i < 2; i++) {
+      final double speed = 0.10 + i * 0.05;
+      final double t = (phase * speed + i * 0.45) % 2.0;
+      final double tri = t < 1.0 ? t : 2.0 - t;
+      final double px = size.width * (0.14 + 0.72 * tri);
+      final double py = size.height *
+          (0.34 + 0.07 * math.sin(tSec * (1.4 + i) + i * 2.4));
+      final double flap = math.sin(tSec * (7 + i * 2)).abs().clamp(0.3, 1.0);
+      final Offset c = Offset(px, py);
+      final double sz = 7.0 + i * 1.5;
+      final Color wingA =
+          i == 0 ? const Color(0xFFFF9F45) : const Color(0xFFB892E0);
+      final Color wingB =
+          i == 0 ? const Color(0xFFFFD166) : const Color(0xFF8FBFF2);
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.scale(flap, 1);
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(-sz * 0.55, -sz * 0.2),
+            width: sz,
+            height: sz * 0.7),
+        Paint()..color = wingA,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(sz * 0.55, -sz * 0.2), width: sz, height: sz * 0.7),
+        Paint()..color = wingA,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(-sz * 0.42, sz * 0.28),
+            width: sz * 0.62,
+            height: sz * 0.46),
+        Paint()..color = wingB,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(sz * 0.42, sz * 0.28),
+            width: sz * 0.62,
+            height: sz * 0.46),
+        Paint()..color = wingB,
+      );
+      canvas.restore();
+      canvas.drawLine(
+        c + Offset(0, -sz * 0.35),
+        c + Offset(0, sz * 0.45),
+        Paint()
+          ..color = const Color(0xFF5A4632)
+          ..strokeWidth = 1.8
+          ..strokeCap = StrokeCap.round,
+      );
+    }
   }
 
   /// Диспетчер сухопутного питомца: тень + нужный «корпус».
-  void _paintLandPet(
-      Canvas canvas, Offset base, Pet pet, int index, double facing) {
+  void _paintLandPet(Canvas canvas, Offset base, Pet pet, int index,
+      double facing, PetBehavior? bhv) {
     final Color bodyBase = speciesBody(pet.type);
     final Color body = skinnedBody(bodyBase, pet.skin);
 
@@ -394,11 +649,12 @@ class _PetScenePainter extends CustomPainter {
         : Color.alphaBlend(skinnedBody(bodyBase, pet.skin).withOpacity(0.35),
             Colors.white);
 
-    // Мягкая тень под питомцем.
+    // Мягкая тень под питомцем (сидящий занимает меньше места вширь).
+    final bool sitting = !sleeping && (bhv?.kind ?? '') == 'sit';
     canvas.drawOval(
       Rect.fromCenter(
         center: base + const Offset(0, 3),
-        width: 64 * (0.55 + pet.stage * 0.22) * 1.15,
+        width: 64 * (0.55 + pet.stage * 0.22) * (sitting ? 0.9 : 1.15),
         height: 11 * (0.55 + pet.stage * 0.22),
       ),
       Paint()..color = Colors.black.withOpacity(0.08),
@@ -406,13 +662,13 @@ class _PetScenePainter extends CustomPainter {
 
     switch (st.build) {
       case 'bird':
-        _paintBird(canvas, base, pet, st, body, belly, facing);
+        _paintBird(canvas, base, pet, st, body, belly, facing, bhv);
         break;
       case 'hop':
-        _paintHop(canvas, base, pet, st, body, belly, facing);
+        _paintHop(canvas, base, pet, st, body, belly, facing, bhv);
         break;
       default:
-        _paintQuad(canvas, base, pet, st, body, belly, facing);
+        _paintQuad(canvas, base, pet, st, body, belly, facing, bhv);
     }
 
     if (sleeping && index == pets.length - 1) {
@@ -421,284 +677,562 @@ class _PetScenePainter extends CustomPainter {
     }
   }
 
-  // ── Четвероногий ходок: тело, 4 лапы с походкой, шея, голова ────────
+  // ── Четвероногий ходок: настоящее тело, шея, голова, повадки ────────
   void _paintQuad(Canvas canvas, Offset base, Pet pet, SpeciesStyle st,
-      Color body, Color belly, double facing) {
+      Color body, Color belly, double facing, PetBehavior? bhv) {
     final double s = 0.55 + pet.stage * 0.22;
     final double bw = 78 * s * st.bodyLen;
     final double bh = 46 * s;
     final double legH = 26 * s * st.legLen;
     final double hr = 15.5 * s * st.headScale;
+    final String kind = sleeping ? 'sleep' : (bhv?.kind ?? 'walk');
+    final double ease = sleeping ? 0 : (bhv?.poseEase ?? 0);
 
     canvas.save();
     canvas.translate(base.dx, base.dy);
     canvas.scale(facing, 1); // морда всегда по направлению ходьбы
 
-    if (sleeping) {
-      // Лёжа: тело распластано, лапки спрятаны, голова впереди на земле.
-      final Offset bodyC = Offset(0, -bh * 0.36);
+    final Color bodyDark =
+        Color.alphaBlend(body.withOpacity(0.82), Colors.black26);
+    final Color far = Color.alphaBlend(body.withOpacity(0.70), Colors.black30);
+
+    if (kind == 'sleep') {
+      // Лёжа: распластанное тело, морда на земле, глаза закрыты.
+      final Offset bodyC = Offset(0, -bh * 0.34);
       _paintTail(canvas, Offset(-bw * 0.46, bodyC.dy), bw, bh, st, body, s,
           wagging: false);
-      canvas.drawOval(
-        Rect.fromCenter(center: bodyC, width: bw, height: bh * 0.74),
+      canvas.drawPath(
+        _quadBodyPath(bodyC, bw, bh * 0.76),
         Paint()..color = body,
       );
       canvas.drawOval(
         Rect.fromCenter(
-          center: bodyC + Offset(-bw * 0.02, bh * 0.14),
+          center: bodyC + Offset(-bw * 0.02, bh * 0.12),
           width: bw * 0.55,
-          height: bh * 0.36,
+          height: bh * 0.30,
         ),
         Paint()..color = belly,
       );
       _paintBackDetails(canvas, bodyC, bw, bh, st, body, s, stage: 3);
-      final Offset headC = Offset(bw * 0.50, -bh * 0.34);
-      canvas.drawLine(
-        Offset(bw * 0.34, bodyC.dy - bh * 0.12),
-        headC,
-        Paint()
-          ..color = body
-          ..strokeWidth = bh * 0.4
-          ..strokeCap = StrokeCap.round,
+      _paintHeadGroup(
+        canvas,
+        pivot: Offset(bw * 0.32, bodyC.dy - bh * 0.14),
+        neckAngle: 0.62,
+        reach: bh * 0.54,
+        headTilt: 0.58,
+        hr: hr,
+        bh: bh,
+        st: st,
+        pet: pet,
+        body: body,
+        belly: belly,
+        s: s,
+        eyesClosed: true,
       );
-      canvas.drawCircle(headC, hr, Paint()..color = body);
-      _paintEarsOnHead(canvas, headC, hr, st, body, belly, s);
-      _paintHeadDetails(canvas, headC, hr, st, body, belly, s);
-      _paintFaceOnHead(canvas, headC, hr, st, pet.type, belly, s, closed: true);
-      _paintHat(canvas, headC, hr, pet, s);
-      _paintGlasses(canvas, headC, hr, pet, s, hidden: true);
       canvas.restore();
       return;
     }
 
-    final double walk = phase * 2 * math.pi;
-    final double bob = math.sin(walk * 2) * 1.6 * s;
-    final Offset bodyC = Offset(0, -legH - bh * 0.46 + bob);
+    if (kind == 'sit') {
+      // ── Сидит: круп на земле, грудь вверх, передние лапы прямые ──
+      final Offset haunchC = Offset(-bw * 0.14, -bh * 0.40);
+      _paintTail(canvas, Offset(-bw * 0.36, -bh * 0.16), bw, bh, st, body, s,
+          wagging: false, wrap: true);
+      // Сложенное бедро.
+      canvas.drawOval(
+        Rect.fromCenter(center: haunchC, width: bw * 0.54, height: bh * 0.92),
+        Paint()..color = body,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: haunchC + Offset(bw * 0.12, bh * 0.20),
+          width: bw * 0.30,
+          height: bh * 0.34,
+        ),
+        Paint()..color = belly,
+      );
+      // Задняя лапка выглядывает из-под бедра.
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(-bw * 0.04, -4 * s),
+          width: bw * 0.26,
+          height: 8.5 * s,
+        ),
+        Paint()..color = bodyDark,
+      );
+      // Наклонённый вверх корпус.
+      final double tilt = -0.66;
+      final double ct = math.cos(tilt), stl = math.sin(tilt);
+      final Offset chestW = haunchC +
+          Offset(
+            bw * 0.42 * ct - (-bh * 0.04) * stl,
+            bw * 0.42 * stl + (-bh * 0.04) * ct,
+          );
+      canvas.save();
+      canvas.translate(haunchC.dx, haunchC.dy);
+      canvas.rotate(tilt);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(bw * 0.20, -bh * 0.02),
+          width: bw * 0.58,
+          height: bh * 0.78,
+        ),
+        Paint()..color = body,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(bw * 0.16, bh * 0.14),
+          width: bw * 0.34,
+          height: bh * 0.28,
+        ),
+        Paint()..color = belly,
+      );
+      canvas.restore();
+      _paintBackDetails(
+        canvas,
+        haunchC + Offset(bw * 0.02, -bh * 0.34),
+        bw * 0.6,
+        bh * 0.8,
+        st,
+        body,
+        s,
+        stage: pet.stage,
+      );
+      // Передние лапы — прямые столбики до земли (верх прячется в груди).
+      canvas.drawCircle(
+        Offset(chestW.dx, chestW.dy + bh * 0.04),
+        bh * 0.16,
+        Paint()..color = body,
+      );
+      for (final double dx in <double>[-5.5 * s, 5.5 * s]) {
+        final Color lc = dx < 0 ? far : body;
+        final double topY = chestW.dy + bh * 0.02;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(chestW.dx + dx - 4.8 * s, topY, 9.6 * s,
+                math.max(4, -topY - 1)),
+            Radius.circular(4.8 * s),
+          ),
+          Paint()..color = lc,
+        );
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(chestW.dx + dx + 3.2 * s, -2.6 * s),
+            width: 13 * s,
+            height: 6.5 * s,
+          ),
+          Paint()..color = lc,
+        );
+      }
+      // Голова сверху груди, чуть поднята — сидит смирно.
+      _paintHeadGroup(
+        canvas,
+        pivot: chestW + Offset(bw * 0.03, -bh * 0.24),
+        neckAngle: 0.42,
+        reach: bh * 0.55,
+        headTilt: 0.06,
+        hr: hr,
+        bh: bh,
+        st: st,
+        pet: pet,
+        body: body,
+        belly: belly,
+        s: s,
+        eyesClosed: false,
+      );
+      canvas.restore();
+      return;
+    }
 
-    // Дальняя пара лап (диагональ, темнее).
-    final Color far = Color.alphaBlend(body.withOpacity(0.72), Colors.black26);
-    _paintLeg(canvas, Offset(-bw * 0.25, -legH + bob * 0.4), legH,
-        math.sin(walk + math.pi) * 0.42, far, s);
-    _paintLeg(canvas, Offset(bw * 0.23, -legH + bob * 0.4), legH,
-        math.sin(walk) * 0.42, far, s);
+    // ── Походка / принюхивание / пастьба ──
+    final double stride = bhv?.stride ?? phase * 2 * math.pi;
+    final double bob = math.sin(stride * 2) * 1.7 * s * (bhv?.bob ?? 1);
+    final Offset bodyC = Offset(0, -legH - bh * 0.50 + bob);
 
-    // Хвост за телом (виляет на ходу).
-    _paintTail(canvas, Offset(-bw * 0.46, bodyC.dy), bw, bh, st, body, s,
+    // Лапы: диагональная походка (дальняя пара темнее), у каждой —
+    // бедро, голень с коленом и лапка с пальцами.
+    final double amp = 0.40;
+    _paintLeg(canvas, Offset(bw * 0.30, bodyC.dy + bh * 0.42), legH,
+        math.sin(stride + math.pi) * amp, far, s);
+    _paintLeg(canvas, Offset(-bw * 0.28, bodyC.dy + bh * 0.40), legH,
+        math.sin(stride + math.pi) * amp, far, s,
+        rear: true);
+    _paintLeg(canvas, Offset(bw * 0.30, bodyC.dy + bh * 0.42), legH,
+        math.sin(stride) * amp, body, s);
+    _paintLeg(canvas, Offset(-bw * 0.28, bodyC.dy + bh * 0.40), legH,
+        math.sin(stride) * amp, body, s,
+        rear: true);
+
+    // Хвост виляет на ходу.
+    _paintTail(canvas, Offset(-bw * 0.44, bodyC.dy - bh * 0.06), bw, bh, st,
+        body, s,
         wagging: true);
 
-    // Ближняя пара лап.
-    _paintLeg(canvas, Offset(-bw * 0.33, -legH + bob * 0.4), legH,
-        math.sin(walk) * 0.42, body, s);
-    _paintLeg(canvas, Offset(bw * 0.31, -legH + bob * 0.4), legH,
-        math.sin(walk + math.pi) * 0.42, body, s);
-
-    // Тело и животик.
-    canvas.drawOval(
-      Rect.fromCenter(center: bodyC, width: bw, height: bh),
-      Paint()..color = body,
+    // Тело настоящего зверя: грудь, холка, круп, поджарый живот.
+    final Path bodyPath = _quadBodyPath(bodyC, bw, bh);
+    canvas.drawPath(
+      bodyPath,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[bodyDark, body],
+        ).createShader(bodyPath.getBounds()),
     );
+    // Бедро — объём задней половины.
     canvas.drawOval(
       Rect.fromCenter(
-        center: bodyC + Offset(0, bh * 0.2),
-        width: bw * 0.58,
-        height: bh * 0.48,
+        center: Offset(-bw * 0.27, bodyC.dy + bh * 0.02),
+        width: bw * 0.40,
+        height: bh * 0.80,
+      ),
+      Paint()
+        ..color = Color.alphaBlend(body.withOpacity(0.86), Colors.black12),
+    );
+    // Животик.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(bw * 0.04, bodyC.dy + bh * 0.30),
+        width: bw * 0.62,
+        height: bh * 0.34,
       ),
       Paint()..color = belly,
     );
-    _paintBackDetails(canvas, bodyC, bw, bh, st, body, s,
-        stage: pet.stage);
+    _paintBackDetails(canvas, bodyC, bw, bh, st, body, s, stage: pet.stage);
 
-    // Шея и голова.
-    final Offset headC =
-        Offset(bw * 0.40, bodyC.dy - bh * (0.14 + st.neck));
+    // Голова на шее: повадки меняют угол шеи и наклон морды.
+    final double walkNeck = 0.10 + math.sin(stride * 2) * 0.03;
+    double neckAngle = walkNeck;
+    double reachM = 1.0;
+    double headTilt = 0.03 + math.sin(stride * 2 + 1) * 0.02;
+    if (ease > 0) {
+      double tAng = 0.9, tReach = 0.95, tTilt = 0.35;
+      if (kind == 'graze') {
+        // Щиплет траву: шея вниз-вперёд, морда ко скошенной «траве».
+        tAng = 1.95;
+        tReach = 1.06;
+        tTilt = 0.60 + math.sin(tSec * 9) * 0.05;
+      } else if (kind == 'sniff') {
+        // Принюхивается: нос опущен, слегка дёргается.
+        tAng = 0.92 + math.sin(tSec * 7) * 0.05;
+        tReach = 0.96;
+        tTilt = 0.36;
+      } else if (kind == 'look') {
+        // Осматривается: голова чуть вскинута.
+        tAng = -0.10 + math.sin(tSec * 1.5) * 0.07;
+        tReach = 1.0;
+        tTilt = -0.04;
+      }
+      neckAngle = walkNeck + (tAng - walkNeck) * ease;
+      reachM = 1.0 + (tReach - 1.0) * ease;
+      headTilt = headTilt + (tTilt - headTilt) * ease;
+    }
+
+    final double neckLen = bh * (0.22 + st.neck * 0.55);
+    final Offset pivot = Offset(bw * 0.30, bodyC.dy - bh * 0.06);
     if (st.extra == 'mane') {
-      _paintMane(canvas, bodyC, headC, bw, bh, s);
+      final Offset headW = pivot +
+          Offset(math.sin(neckAngle), -math.cos(neckAngle)) *
+              (neckLen * reachM);
+      _paintMane(canvas, pivot, headW, bw, bh, s);
     }
-    if (st.neck > 0.16) {
-      canvas.drawLine(
-        Offset(bw * 0.30, bodyC.dy - bh * 0.16),
-        headC + Offset(-hr * 0.1, hr * 0.5),
-        Paint()
-          ..color = body
-          ..strokeWidth = bh * 0.4
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-    canvas.drawCircle(headC, hr, Paint()..color = body);
-    _paintEarsOnHead(canvas, headC, hr, st, body, belly, s);
-    _paintHeadDetails(canvas, headC, hr, st, body, belly, s);
-    _paintFaceOnHead(canvas, headC, hr, st, pet.type, belly, s, closed: false);
-    _paintHat(canvas, headC, hr, pet, s);
-    _paintNeckwear(canvas, headC, hr, pet, s);
-    _paintGlasses(canvas, headC, hr, pet, s, hidden: false);
+    _paintHeadGroup(
+      canvas,
+      pivot: pivot,
+      neckAngle: neckAngle,
+      reach: neckLen * reachM,
+      headTilt: headTilt,
+      hr: hr,
+      bh: bh,
+      st: st,
+      pet: pet,
+      body: body,
+      belly: belly,
+      s: s,
+      eyesClosed: false,
+    );
     canvas.restore();
   }
 
-  // ── Птица: две лапы, вертикальное тело, голова сверху ───────────────
+  /// Силуэт настоящего четвероногого: грудь, холка, прогиб спины,
+  /// округлый круп и поджарый живот.
+  Path _quadBodyPath(Offset c, double bw, double bh) {
+    double bx(double f) => c.dx + f * bw;
+    double by(double f) => c.dy + f * bh;
+    return Path()
+      ..moveTo(bx(0.46), by(0.00))
+      ..cubicTo(bx(0.50), by(-0.22), bx(0.42), by(-0.40), bx(0.18), by(-0.48))
+      ..cubicTo(bx(0.06), by(-0.52), bx(-0.04), by(-0.44), bx(-0.14), by(-0.47))
+      ..cubicTo(bx(-0.26), by(-0.52), bx(-0.40), by(-0.50), bx(-0.47), by(-0.30))
+      ..cubicTo(bx(-0.52), by(-0.12), bx(-0.50), by(0.12), bx(-0.42), by(0.28))
+      ..cubicTo(bx(-0.32), by(0.44), bx(-0.08), by(0.47), bx(0.12), by(0.42))
+      ..cubicTo(bx(0.30), by(0.38), bx(0.42), by(0.22), bx(0.46), by(0.00))
+      ..close();
+  }
+
+  /// Шея и голова: угол шеи (neckAngle от вертикали), вытянутость (reach)
+  /// и наклон морды (headTilt) независимы — поэтому зверь умеет и бежать
+  /// с высоко поднятой головой, и принюхиваться, и щипать траву.
+  void _paintHeadGroup(
+    Canvas canvas, {
+    required Offset pivot,
+    required double neckAngle,
+    required double reach,
+    required double headTilt,
+    required double hr,
+    required double bh,
+    required SpeciesStyle st,
+    required Pet pet,
+    required Color body,
+    required Color belly,
+    required double s,
+    required bool eyesClosed,
+  }) {
+    final Offset dir = Offset(math.sin(neckAngle), -math.cos(neckAngle));
+    final Offset headC = pivot + dir * reach;
+
+    // Шея — толстая дуга от плеч к голове.
+    if (reach > hr * 0.2) {
+      final Offset mid =
+          pivot + dir * (reach * 0.52) + Offset(bh * 0.12, 0);
+      canvas.drawPath(
+        Path()
+          ..moveTo(pivot.dx - bh * 0.10, pivot.dy + bh * 0.04)
+          ..quadraticBezierTo(
+              mid.dx, mid.dy, headC.dx - hr * 0.15, headC.dy + hr * 0.05),
+        Paint()
+          ..color = body
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = bh * 0.30
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+
+    // Череп со всем содержимым поворачивается вместе с мордой.
+    canvas.save();
+    canvas.translate(headC.dx, headC.dy);
+    canvas.rotate(neckAngle * 0.5 + headTilt);
+    canvas.drawCircle(Offset.zero, hr, Paint()..color = body);
+    _paintEarsOnHead(canvas, Offset.zero, hr, st, body, belly, s);
+    _paintHeadDetails(canvas, Offset.zero, hr, st, body, belly, s);
+    _paintFaceOnHead(canvas, Offset.zero, hr, st, pet.type, belly, s,
+        closed: eyesClosed, body: body);
+    _paintHat(canvas, Offset.zero, hr, pet, s);
+    _paintGlasses(canvas, Offset.zero, hr, pet, s, hidden: eyesClosed);
+    canvas.restore();
+
+    // Шарф или бантик — на основании шеи.
+    if (pet.neck == 'scarf' || pet.neck == 'bow') {
+      final Offset anchor =
+          pivot + dir * (reach * 0.22) + Offset(0, bh * 0.10);
+      _paintNeckwear(canvas, anchor, hr, pet, s);
+    }
+  }
+
+  // ── Птица: две лапы с коленчиком, грушевидное тело, клюв ────────────
   void _paintBird(Canvas canvas, Offset base, Pet pet, SpeciesStyle st,
-      Color body, Color belly, double facing) {
+      Color body, Color belly, double facing, PetBehavior? bhv) {
     final double s = 0.55 + pet.stage * 0.22;
     final double bw = 40 * s;
     final double bh = 56 * s * st.bodyLen;
     final double legH = 16 * s;
     final double hr = 14.5 * s * st.headScale;
+    final String kind = sleeping ? 'sleep' : (bhv?.kind ?? 'walk');
 
     canvas.save();
     canvas.translate(base.dx, base.dy);
     canvas.scale(facing, 1);
 
-    final double walk = phase * 2 * math.pi;
-    if (!sleeping) {
+    final double walk = bhv?.stride ?? phase * 2 * math.pi;
+    if (!sleeping && kind == 'walk') {
       canvas.rotate(math.sin(walk) * 0.05); // переваливающаяся походка
     }
 
-    final double sit = sleeping ? legH * 0.35 : legH;
-    final Offset bodyC = Offset(0, -sit - bh * 0.46);
+    final double sit = kind == 'sleep' ? legH * 0.35 : legH;
+    final Offset bodyC = Offset(0, -sit - bh * 0.44);
 
-    // Лапки-палочки (шагают вразнобой).
+    // Лапки с коленчиком (шагают вразнобой).
     final Color far = Color.alphaBlend(body.withOpacity(0.72), Colors.black26);
     final Paint legPaint = Paint()
-      ..color = sleeping ? far : const Color(0xFFE8A13D)
+      ..color = kind == 'sleep' ? far : const Color(0xFFE8A13D)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4.2 * s
       ..strokeCap = StrokeCap.round;
     for (final double off in <double>[0, math.pi]) {
       final double sx = off == 0 ? -bw * 0.14 : bw * 0.14;
       final double swing =
-          sleeping ? 0 : math.sin(walk + off) * 0.3;
+          kind == 'sleep' ? 0 : math.sin(walk + off) * 0.32;
       canvas.save();
       canvas.translate(sx, -sit);
       canvas.rotate(swing);
-      canvas.drawLine(Offset(0, 0), Offset(0, sit), legPaint);
+      canvas.drawLine(Offset(0, 0), Offset(0, sit * 0.62), legPaint);
+      canvas.drawLine(Offset(0, sit * 0.62), Offset(2 * s, sit), legPaint);
+      // Пальчики.
       canvas.drawLine(
-          Offset(0, sit), Offset(5 * s, sit + 1), legPaint);
+          Offset(2 * s, sit), Offset(6.5 * s, sit + 0.5), legPaint);
+      canvas.drawLine(
+          Offset(2 * s, sit), Offset(-1.5 * s, sit + 0.5), legPaint);
       canvas.restore();
     }
 
-    // Хвост-веер сзади-снизу.
+    // Хвост-веер из перьев.
     final Path tail = Path()
-      ..moveTo(-bw * 0.30, bodyC.dy + bh * 0.30)
-      ..lineTo(-bw * 0.78, bodyC.dy + bh * 0.44)
-      ..lineTo(-bw * 0.32, bodyC.dy + bh * 0.52)
+      ..moveTo(-bw * 0.26, bodyC.dy + bh * 0.22)
+      ..lineTo(-bw * 0.86, bodyC.dy + bh * 0.30)
+      ..lineTo(-bw * 0.80, bodyC.dy + bh * 0.42)
+      ..lineTo(-bw * 0.70, bodyC.dy + bh * 0.36)
+      ..lineTo(-bw * 0.66, bodyC.dy + bh * 0.50)
+      ..lineTo(-bw * 0.28, bodyC.dy + bh * 0.44)
       ..close();
-    canvas.drawPath(tail, Paint()..color = Color.alphaBlend(body.withOpacity(0.85), Colors.black12));
+    canvas.drawPath(
+        tail,
+        Paint()
+          ..color =
+              Color.alphaBlend(body.withOpacity(0.85), Colors.black12));
 
-    // Тело и животик.
-    canvas.drawOval(
-      Rect.fromCenter(center: bodyC, width: bw, height: bh),
-      Paint()..color = body,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: bodyC + Offset(bw * 0.08, bh * 0.16),
-        width: bw * 0.58,
-        height: bh * 0.5,
-      ),
-      Paint()..color = belly,
-    );
-
-    // Крылышко.
-    final Paint wing = Paint()..color = Color.alphaBlend(body.withOpacity(0.8), Colors.black12);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: bodyC + Offset(-bw * 0.12, -bh * 0.02),
-        width: bw * 0.42,
-        height: bh * 0.46,
-      ),
-      wing,
-    );
-
-    // Голова.
-    final Offset headC = Offset(bw * 0.06, bodyC.dy - bh * 0.5 - hr * 0.62);
-    canvas.drawCircle(headC, hr, Paint()..color = body);
-    _paintEarsOnHead(canvas, headC, hr, st, body, belly, s);
-    _paintHeadDetails(canvas, headC, hr, st, body, belly, s);
-    _paintFaceOnHead(canvas, headC, hr, st, pet.type, belly, s,
-        closed: sleeping);
-    _paintHat(canvas, headC, hr, pet, s);
-    _paintNeckwear(
-        canvas, headC, hr, pet, s,
-        anchor: Offset(bw * 0.04, bodyC.dy - bh * 0.42));
-    _paintGlasses(canvas, headC, hr, pet, s, hidden: sleeping);
-    canvas.restore();
-  }
-
-  // ── Прыгун: зайчик и лягушонок ──────────────────────────────────────
-  void _paintHop(Canvas canvas, Offset base, Pet pet, SpeciesStyle st,
-      Color body, Color belly, double facing) {
-    final double s = 0.55 + pet.stage * 0.22;
-    final double bw = 58 * s * st.bodyLen;
-    final double bh = 46 * s;
-
-    // Прыжок с паузой: 40% цикла в воздухе.
-    double jump = 0;
-    if (!sleeping) {
-      final double t = (phase * 1.6 + pet.id.hashCode.abs() % 100 / 400) % 1.0;
-      if (t < 0.4) jump = -24 * s * math.sin(math.pi * t / 0.4);
-    }
-
-    canvas.save();
-    canvas.translate(base.dx, base.dy + jump * 0);
-    canvas.scale(facing, 1);
-    canvas.translate(0, jump);
-
-    final Offset bodyC = Offset(0, -bh * 0.5 - 4 * s);
-
-    // Задние лапки-пружинки (у зайца) / сложенные лапы (у лягушки).
-    final Paint hind = Paint()..color = Color.alphaBlend(body.withOpacity(0.88), Colors.black15);
+    // Тело-груша.
+    final Path bodyPath = Path()
+      ..moveTo(bw * 0.40, bodyC.dy - bh * 0.10)
+      ..cubicTo(bw * 0.44, bodyC.dy - bh * 0.40, bw * 0.10,
+          bodyC.dy - bh * 0.52, -bw * 0.10, bodyC.dy - bh * 0.44)
+      ..cubicTo(-bw * 0.40, bodyC.dy - bh * 0.30, -bw * 0.44,
+          bodyC.dy + bh * 0.16, -bw * 0.26, bodyC.dy + bh * 0.36)
+      ..cubicTo(-bw * 0.10, bodyC.dy + bh * 0.52, bw * 0.20,
+          bodyC.dy + bh * 0.48, bw * 0.34, bodyC.dy + bh * 0.24)
+      ..close();
+    canvas.drawPath(bodyPath, Paint()..color = body);
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(-bw * 0.24, -6 * s),
-        width: bw * 0.34,
-        height: bh * 0.24,
-      ),
-      hind,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(-bw * 0.30, -bh * 0.2),
-        width: bw * 0.42,
-        height: bh * 0.3,
-      ),
-      hind,
-    );
-    // Передние лапки.
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(bw * 0.34, -3 * s),
-        width: bw * 0.16,
-        height: bh * 0.14,
-      ),
-      Paint()..color = body,
-    );
-
-    if (pet.type == PetType.bunny) {
-      _paintTail(canvas, Offset(-bw * 0.5, bodyC.dy + bh * 0.1), bw, bh, st,
-          body, s,
-          wagging: false);
-    }
-
-    // Тело и животик.
-    canvas.drawOval(
-      Rect.fromCenter(center: bodyC, width: bw, height: bh),
-      Paint()..color = body,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: bodyC + Offset(bw * 0.06, bh * 0.18),
-        width: bw * 0.52,
+        center: bodyC + Offset(bw * 0.10, bh * 0.14),
+        width: bw * 0.54,
         height: bh * 0.44,
       ),
       Paint()..color = belly,
     );
 
-    final double hr = bh * 0.42;
-    if (st.muzzle == 'topEyes') {
+    // Крылышко с пёрышками.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: bodyC + Offset(-bw * 0.14, -bh * 0.02),
+        width: bw * 0.46,
+        height: bh * 0.42,
+      ),
+      Paint()
+        ..color = Color.alphaBlend(body.withOpacity(0.8), Colors.black15),
+    );
+    final Paint feather = Paint()
+      ..color = Color.alphaBlend(body.withOpacity(0.6), Colors.black25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+        bodyC + Offset(-bw * 0.10, bh * 0.02),
+        bodyC + Offset(-bw * 0.30, bh * 0.16),
+        feather);
+    canvas.drawLine(
+        bodyC + Offset(-bw * 0.08, bh * 0.12),
+        bodyC + Offset(-bw * 0.26, bh * 0.26),
+        feather);
+
+    // Голова с наклоном: на паузе птица клюёт зёрнышки.
+    final double pitch = (bhv?.headPitch ?? 0);
+    final Offset pivot = bodyC + Offset(bw * 0.10, -bh * 0.44);
+    final double neckLen = bh * 0.26;
+    final Offset headC = pivot +
+        Offset(math.sin(pitch * 1.35), -math.cos(pitch * 1.35)) * neckLen;
+    canvas.save();
+    canvas.translate(headC.dx, headC.dy);
+    canvas.rotate(pitch * 0.9);
+    canvas.drawCircle(Offset.zero, hr, Paint()..color = body);
+    _paintEarsOnHead(canvas, Offset.zero, hr, st, body, belly, s);
+    _paintHeadDetails(canvas, Offset.zero, hr, st, body, belly, s);
+    _paintFaceOnHead(canvas, Offset.zero, hr, st, pet.type, belly, s,
+        closed: kind == 'sleep', body: body);
+    _paintHat(canvas, Offset.zero, hr, pet, s);
+    _paintGlasses(canvas, Offset.zero, hr, pet, s, hidden: kind == 'sleep');
+    canvas.restore();
+    if (pet.neck == 'scarf' || pet.neck == 'bow') {
+      _paintNeckwear(
+          canvas, bodyC + Offset(bw * 0.06, -bh * 0.40), hr, pet, s);
+    }
+    canvas.restore();
+  }
+
+  // ── Прыгуны: настоящий зайчик и лягушонок ───────────────────────────
+  void _paintHop(Canvas canvas, Offset base, Pet pet, SpeciesStyle st,
+      Color body, Color belly, double facing, PetBehavior? bhv) {
+    final double s = 0.55 + pet.stage * 0.22;
+    final double bw = 58 * s * st.bodyLen;
+    final double bh = 46 * s;
+
+    // Прыжок с паузой: 38% цикла в воздухе.
+    double jump = 0;
+    double airTilt = 0;
+    if (!sleeping) {
+      final double t =
+          (tSec * 0.85 + (pet.id.hashCode.abs() % 100) / 100.0) % 1.0;
+      if (t < 0.38) {
+        final double k = math.sin(math.pi * t / 0.38);
+        jump = -26 * s * k;
+        airTilt = 0.09 * k;
+      }
+    }
+
+    canvas.save();
+    canvas.translate(base.dx, base.dy);
+    canvas.scale(facing, 1);
+    canvas.translate(0, jump);
+    canvas.rotate(airTilt);
+
+    final Offset bodyC = Offset(0, -bh * 0.48 - 4 * s);
+    final bool isFrog = st.muzzle == 'topEyes';
+
+    if (isFrog) {
       // Лягушонок: глаза-фонарики на макушке + широкая улыбка.
       final double eyeY = bodyC.dy - bh * 0.5;
+      final double hr = bh * 0.42;
+      // Сложенные задние лапы-пружины.
+      final Paint hind =
+          Paint()..color = Color.alphaBlend(body.withOpacity(0.88), Colors.black15);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(-bw * 0.24, -6 * s),
+          width: bw * 0.34,
+          height: bh * 0.24,
+        ),
+        hind,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(-bw * 0.30, -bh * 0.2),
+          width: bw * 0.42,
+          height: bh * 0.3,
+        ),
+        hind,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(bw * 0.34, -3 * s),
+          width: bw * 0.16,
+          height: bh * 0.14,
+        ),
+        Paint()..color = body,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(center: bodyC, width: bw, height: bh),
+        Paint()..color = body,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: bodyC + Offset(bw * 0.06, bh * 0.18),
+          width: bw * 0.52,
+          height: bh * 0.44,
+        ),
+        Paint()..color = belly,
+      );
       for (final double sx in <double>[-0.22, 0.22]) {
-        canvas.drawCircle(Offset(bw * sx, eyeY), hr * 0.42,
-            Paint()..color = body);
+        canvas.drawCircle(
+            Offset(bw * sx, eyeY), hr * 0.42, Paint()..color = body);
         canvas.drawCircle(Offset(bw * sx, eyeY - 2 * s), hr * 0.3,
             Paint()..color = Colors.white);
         canvas.drawCircle(Offset(bw * sx, eyeY - 1 * s), hr * 0.14,
@@ -722,74 +1256,196 @@ class _PetScenePainter extends CustomPainter {
       );
       _paintHat(canvas, bodyC + Offset(0, -bh * 0.86), hr, pet, s);
       _paintGlasses(canvas, bodyC, hr, pet, s, hidden: sleeping);
-    } else {
-      // Зайчик: голова спереди-сверху, длинные уши, зубки.
-      final Offset headC = Offset(bw * 0.40, bodyC.dy - bh * 0.38);
-      canvas.drawCircle(headC, hr, Paint()..color = body);
-      _paintEarsOnHead(canvas, headC, hr, st, body, belly, s);
-      _paintHeadDetails(canvas, headC, hr, st, body, belly, s);
-      _paintFaceOnHead(canvas, headC, hr, st, pet.type, belly, s,
-          closed: sleeping);
-      _paintHat(canvas, headC, hr, pet, s);
-      _paintNeckwear(canvas, headC, hr, pet, s,
-          anchor: Offset(bw * 0.34, bodyC.dy - bh * 0.1));
-      _paintGlasses(canvas, headC, hr, pet, s, hidden: sleeping);
+      canvas.restore();
+      return;
+    }
+
+    // ── Настоящий зайчик ──
+    final Color far = Color.alphaBlend(body.withOpacity(0.8), Colors.black15);
+    // Пушистый хвостик.
+    canvas.drawCircle(
+      Offset(-bw * 0.40, bodyC.dy + bh * 0.10),
+      7 * s,
+      Paint()..color = Colors.white.withOpacity(0.9),
+    );
+    // Заднее бедро и ступня.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(-bw * 0.14, bodyC.dy + bh * 0.16),
+        width: bw * 0.36,
+        height: bh * 0.44,
+      ),
+      Paint()..color = far,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(bw * 0.02, -6 * s),
+        width: bw * 0.34,
+        height: 8.5 * s,
+      ),
+      Paint()..color = far,
+    );
+    // Передние лапки.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(bw * 0.30, -5 * s),
+        width: bw * 0.15,
+        height: 7.5 * s,
+      ),
+      Paint()..color = body,
+    );
+    // Тело-капля: круп выше, грудь вперёд.
+    final Path bodyPath = Path()
+      ..moveTo(bw * 0.42, bodyC.dy - bh * 0.02)
+      ..cubicTo(bw * 0.46, bodyC.dy - bh * 0.34, bw * 0.16,
+          bodyC.dy - bh * 0.55, -bw * 0.08, bodyC.dy - bh * 0.50)
+      ..cubicTo(-bw * 0.36, bodyC.dy - bh * 0.44, -bw * 0.48,
+          bodyC.dy - bh * 0.10, -bw * 0.44, bodyC.dy + bh * 0.14)
+      ..cubicTo(-bw * 0.38, bodyC.dy + bh * 0.40, bw * 0.10,
+          bodyC.dy + bh * 0.46, bw * 0.28, bodyC.dy + bh * 0.24)
+      ..close();
+    canvas.drawPath(bodyPath, Paint()..color = body);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: bodyC + Offset(bw * 0.02, bh * 0.20),
+        width: bw * 0.5,
+        height: bh * 0.30,
+      ),
+      Paint()..color = belly,
+    );
+
+    // Голова спереди-сверху; на паузе опускает её к траве.
+    final double ease = sleeping ? 0 : (bhv?.poseEase ?? 0);
+    final String kind = bhv?.kind ?? 'walk';
+    final double drop =
+        (kind == 'graze' || kind == 'sniff') ? ease * bh * 0.22 : 0;
+    final Offset headC = Offset(bw * 0.40, bodyC.dy - bh * 0.40 + drop);
+    final double hr = bh * 0.34;
+    canvas.drawCircle(headC, hr, Paint()..color = body);
+    _paintEarsOnHead(canvas, headC, hr, st, body, belly, s);
+    _paintHeadDetails(canvas, headC, hr, st, body, belly, s);
+    _paintFaceOnHead(canvas, headC, hr, st, pet.type, belly, s,
+        closed: sleeping, body: body);
+    _paintHat(canvas, headC, hr, pet, s);
+    _paintGlasses(canvas, headC, hr, pet, s, hidden: sleeping);
+    if (pet.neck == 'scarf' || pet.neck == 'bow') {
+      _paintNeckwear(
+          canvas, headC + Offset(-bh * 0.26, bh * 0.34), hr, pet, s);
     }
     canvas.restore();
   }
 
-  // ── Лапа с походкой ─────────────────────────────────────────────────
+  // ── Лапа с коленом: бедро, голень и лапка с пальцами ───────────────
   void _paintLeg(
-      Canvas canvas, Offset hip, double legH, double swing, Color color, double s) {
+      Canvas canvas, Offset hip, double legH, double swing, Color color, double s,
+      {bool rear = false}) {
+    final double w = (rear ? 11.5 : 9.5) * s;
     canvas.save();
     canvas.translate(hip.dx, hip.dy);
     canvas.rotate(swing);
-    final double legW = 10.5 * s;
-    final Rect r = Rect.fromLTWH(-legW / 2, -2, legW, legH + 2);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(r, Radius.circular(legW * 0.5)),
-      Paint()..color = color,
-    );
-    // Ступня-лапка с пальцами.
-    final Offset foot = Offset(0, legH);
+    // Бедро / плечо (прячется в теле).
     canvas.drawOval(
       Rect.fromCenter(
-          center: foot, width: legW * 1.55, height: legW * 0.95),
+        center: Offset(0, legH * 0.06),
+        width: w * (rear ? 2.1 : 1.7),
+        height: legH * 0.55,
+      ),
       Paint()..color = color,
     );
-    final Paint toe = Paint()..color = Colors.white.withOpacity(0.3);
+    // Верхний сегмент.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(-w / 2, 0, w, legH * 0.58),
+        Radius.circular(w * 0.45),
+      ),
+      Paint()..color = color,
+    );
+    // Голень с коленом.
+    canvas.save();
+    canvas.translate(0, legH * 0.54);
+    canvas.rotate(math.max(0, -math.sin(swing)) * 0.5);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(-w * 0.42, 0, w * 0.84, legH * 0.46),
+        Radius.circular(w * 0.4),
+      ),
+      Paint()..color = color,
+    );
+    // Лапка с пальцами.
+    final Offset foot = Offset(w * 0.10, legH * 0.44);
+    canvas.drawOval(
+      Rect.fromCenter(center: foot, width: w * 1.55, height: w * 0.95),
+      Paint()..color = color,
+    );
+    final Paint toe = Paint()..color = Colors.white.withOpacity(0.28);
     for (int t = -1; t <= 1; t++) {
       canvas.drawCircle(
-        Offset(foot.dx + t * legW * 0.42, foot.dy + legW * 0.12),
-        legW * 0.14,
-        toe,
-      );
+        Offset(foot.dx + t * w * 0.42, foot.dy + w * 0.12), w * 0.13, toe);
     }
+    canvas.restore();
     canvas.restore();
   }
 
   // ── Хвосты ──────────────────────────────────────────────────────────
   void _paintTail(Canvas canvas, Offset anchor, double bw, double bh,
       SpeciesStyle st, Color body, double s,
-      {required bool wagging}) {
-    final double wag = wagging ? math.sin(phase * 2 * math.pi * 2) * 0.18 : 0;
+      {required bool wagging, bool wrap = false}) {
+    final double wag = wagging ? math.sin(tSec * 2 * math.pi * 1.6) * 0.16 : 0;
     canvas.save();
     canvas.translate(anchor.dx, anchor.dy);
+    if (wrap) {
+      // Сидит: хвост обёрнут вокруг крупа.
+      final bool bushy = st.tail == 'bushy';
+      final Paint tp = Paint()
+        ..color = body
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = bushy ? 10 * s : 5 * s
+        ..strokeCap = StrokeCap.round;
+      final Rect ring = Rect.fromCenter(
+        center: Offset(bw * 0.10, bh * 0.12),
+        width: bw * 0.44,
+        height: bh * 0.54,
+      );
+      canvas.drawArc(ring, 0.15 * math.pi, 0.95 * math.pi, false, tp);
+      if (bushy) {
+        canvas.drawArc(
+          ring,
+          0.15 * math.pi,
+          0.32 * math.pi,
+          false,
+          Paint()
+            ..color = Colors.white.withOpacity(0.8)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 10 * s
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+      canvas.restore();
+      return;
+    }
     canvas.rotate(wag);
     switch (st.tail) {
       case 'bushy':
-        // Пышный хвост с белым кончиком (лиса, собака, белка).
+        // Пышный хвост: назад с лёгким прогибом, кончик подкручен вверх.
         final Path tail = Path()
-          ..moveTo(0, bh * 0.18)
-          ..quadraticBezierTo(-bw * 0.42, bh * 0.10, -bw * 0.34, -bh * 0.42)
-          ..quadraticBezierTo(-bw * 0.12, -bh * 0.12, 0, bh * 0.18)
+          ..moveTo(0, bh * 0.12)
+          ..cubicTo(-bw * 0.30, bh * 0.30, -bw * 0.55, bh * 0.22,
+              -bw * 0.70, bh * 0.00)
+          ..cubicTo(-bw * 0.80, -bh * 0.14, -bw * 0.72, -bh * 0.34,
+              -bw * 0.56, -bh * 0.30)
+          ..cubicTo(-bw * 0.62, -bh * 0.18, -bw * 0.52, -bh * 0.02,
+              -bw * 0.30, bh * 0.02)
+          ..cubicTo(-bw * 0.18, bh * 0.05, -bw * 0.08, bh * 0.10, 0, bh * 0.12)
           ..close();
         canvas.drawPath(tail, Paint()..color = body);
         final Path tip = Path()
-          ..moveTo(-bw * 0.315, -bh * 0.30)
-          ..quadraticBezierTo(-bw * 0.36, -bh * 0.42, -bw * 0.34, -bh * 0.42)
-          ..quadraticBezierTo(-bw * 0.2, -bh * 0.24, -bw * 0.16, -bh * 0.14)
-          ..quadraticBezierTo(-bw * 0.26, -bh * 0.16, -bw * 0.315, -bh * 0.30)
+          ..moveTo(-bw * 0.70, bh * 0.00)
+          ..cubicTo(-bw * 0.80, -bh * 0.14, -bw * 0.72, -bh * 0.34,
+              -bw * 0.56, -bh * 0.30)
+          ..cubicTo(-bw * 0.60, -bh * 0.16, -bw * 0.58, -bh * 0.06,
+              -bw * 0.52, bh * 0.02)
+          ..cubicTo(-bw * 0.58, bh * 0.04, -bw * 0.65, bh * 0.03,
+              -bw * 0.70, bh * 0.00)
           ..close();
         canvas.drawPath(tip, Paint()..color = Colors.white.withOpacity(0.85));
         break;
@@ -801,7 +1457,9 @@ class _PetScenePainter extends CustomPainter {
           ..strokeCap = StrokeCap.round;
         final Path t = Path()
           ..moveTo(0, bh * 0.2)
-          ..quadraticBezierTo(-bw * 0.3, bh * 0.26, -bw * 0.3, -bh * 0.2);
+          ..cubicTo(-bw * 0.26, bh * 0.30, -bw * 0.36, bh * 0.02,
+              -bw * 0.22, -bh * 0.34)
+          ..quadraticBezierTo(-bw * 0.16, -bh * 0.46, -bw * 0.06, -bh * 0.40);
         canvas.drawPath(t, tp);
         break;
       case 'curl':
@@ -989,60 +1647,63 @@ class _PetScenePainter extends CustomPainter {
     }
   }
 
-  // ── Морда на голове ─────────────────────────────────────────────────
+  // ── Морда в профиль: один глаз, нос, рот, усы ───────────────────────
   void _paintFaceOnHead(Canvas canvas, Offset headC, double hr,
       SpeciesStyle st, PetType type, Color belly, double s,
-      {required bool closed}) {
-    final double eyeY = headC.dy - hr * 0.06;
-    final double eyeDX = hr * 0.38;
-    final bool blink =
-        !closed && ((phase * 3) % 1.0) < 0.08;
+      {required bool closed, required Color body}) {
+    final bool blink = !closed && ((tSec * 0.33) % 1.0) < 0.07;
+    final double ex = headC.dx + hr * 0.36;
+    final double ey = headC.dy - hr * 0.08;
+    final Paint ink = Paint()
+      ..color = const Color(0xFF3A3A3A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
 
-    if (blink || closed) {
-      final Paint lash = Paint()
-        ..color = const Color(0xFF4A3B2A)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.3
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(Offset(headC.dx - eyeDX - hr * 0.2, eyeY),
-          Offset(headC.dx - eyeDX + hr * 0.2, eyeY), lash);
-      canvas.drawLine(Offset(headC.dx + eyeDX - hr * 0.2, eyeY),
-          Offset(headC.dx + eyeDX + hr * 0.2, eyeY), lash);
+    // Глаз: белок, радужка, блик; изредка мигает.
+    if (closed || blink) {
+      canvas.drawArc(
+        Rect.fromCenter(
+            center: Offset(ex, ey), width: hr * 0.62, height: hr * 0.5),
+        0.2 * math.pi,
+        0.6 * math.pi,
+        false,
+        Paint()
+          ..color = const Color(0xFF3A3A3A)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4
+          ..strokeCap = StrokeCap.round,
+      );
     } else {
-      final Paint white = Paint()..color = Colors.white;
-      final Paint pupil = Paint()..color = const Color(0xFF33261A);
       canvas.drawCircle(
-          Offset(headC.dx - eyeDX, eyeY), hr * 0.3, white);
+          Offset(ex, ey), hr * 0.27, Paint()..color = Colors.white);
       canvas.drawCircle(
-          Offset(headC.dx + eyeDX, eyeY), hr * 0.3, white);
-      canvas.drawCircle(Offset(headC.dx - eyeDX + hr * 0.08, eyeY + hr * 0.05),
-          hr * 0.15, pupil);
-      canvas.drawCircle(Offset(headC.dx + eyeDX + hr * 0.08, eyeY + hr * 0.05),
-          hr * 0.15, pupil);
-      canvas.drawCircle(Offset(headC.dx - eyeDX + hr * 0.14, eyeY - hr * 0.08),
-          hr * 0.05, white);
-      canvas.drawCircle(Offset(headC.dx + eyeDX + hr * 0.14, eyeY - hr * 0.08),
-          hr * 0.05, white);
+        Offset(ex + hr * 0.06, ey + hr * 0.01),
+        hr * 0.155,
+        Paint()..color = const Color(0xFF33261A),
+      );
+      canvas.drawCircle(
+        Offset(ex + hr * 0.13, ey - hr * 0.09),
+        hr * 0.055,
+        Paint()..color = Colors.white,
+      );
     }
 
-    // Румянец.
-    final Paint blush = Paint()
-      ..color = const Color(0xFFFF8FA3).withOpacity(0.5);
-    canvas.drawCircle(headC + Offset(-hr * 0.72, hr * 0.3), hr * 0.2, blush);
-    canvas.drawCircle(headC + Offset(hr * 0.05, hr * 0.42), hr * 0.18, blush);
+    // Румянец на щеке.
+    canvas.drawCircle(
+      headC + Offset(-hr * 0.30, hr * 0.36),
+      hr * 0.16,
+      Paint()..color = const Color(0xFFFF8FA3).withOpacity(0.45),
+    );
 
-    final Paint ink = Paint()
-      ..color = const Color(0xFF4A3B2A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round;
     switch (st.muzzle) {
       case 'beak':
         canvas.drawPath(
           Path()
-            ..moveTo(headC.dx + hr * 0.35, headC.dy)
-            ..lineTo(headC.dx + hr * 0.35, headC.dy + hr * 0.12)
-            ..lineTo(headC.dx + hr * 0.95, headC.dy + hr * 0.06)
+            ..moveTo(headC.dx + hr * 0.30, headC.dy - hr * 0.02)
+            ..lineTo(headC.dx + hr * 0.30, headC.dy + hr * 0.16)
+            ..quadraticBezierTo(headC.dx + hr * 0.55, headC.dy + hr * 0.30,
+                headC.dx + hr * 1.02, headC.dy + hr * 0.10)
             ..close(),
           Paint()..color = kBeakOrange,
         );
@@ -1052,33 +1713,41 @@ class _PetScenePainter extends CustomPainter {
           RRect.fromRectAndRadius(
             Rect.fromCenter(
               center: headC + Offset(hr * 0.62, hr * 0.14),
-              width: hr * 0.95,
-              height: hr * 0.4,
+              width: hr,
+              height: hr * 0.42,
             ),
             Radius.circular(4 * s),
           ),
           Paint()..color = kBeakOrange,
         );
+        canvas.drawLine(
+          headC + Offset(hr * 0.30, hr * 0.14),
+          headC + Offset(hr * 1.08, hr * 0.10),
+          Paint()
+            ..color = const Color(0xFF3A3A3A).withOpacity(0.6)
+            ..strokeWidth = 1.6
+            ..strokeCap = StrokeCap.round,
+        );
         break;
       case 'bearMuzzle':
         canvas.drawOval(
           Rect.fromCenter(
-            center: headC + Offset(hr * 0.34, hr * 0.3),
+            center: headC + Offset(hr * 0.40, hr * 0.28),
             width: hr * 0.95,
             height: hr * 0.66,
           ),
           Paint()..color = belly,
         );
-        canvas.drawCircle(headC + Offset(hr * 0.42, hr * 0.16), hr * 0.13,
+        canvas.drawCircle(headC + Offset(hr * 0.62, hr * 0.06), hr * 0.125,
             Paint()..color = kInk);
         canvas.drawArc(
           Rect.fromCenter(
-            center: headC + Offset(hr * 0.42, hr * 0.38),
+            center: headC + Offset(hr * 0.52, hr * 0.34),
             width: hr * 0.5,
             height: hr * 0.4,
           ),
-          0.3,
-          2.4,
+          0.25,
+          2.2,
           false,
           ink,
         );
@@ -1086,27 +1755,27 @@ class _PetScenePainter extends CustomPainter {
       case 'buckteeth':
         canvas.drawArc(
           Rect.fromCenter(
-            center: headC + Offset(hr * 0.4, hr * 0.22),
+            center: headC + Offset(hr * 0.42, hr * 0.20),
             width: hr * 0.62,
             height: hr * 0.46,
           ),
           0.3,
-          2.4,
+          2.2,
           false,
           ink,
         );
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromLTWH(headC.dx + hr * 0.26, headC.dy + hr * 0.3,
-                hr * 0.16, hr * 0.24),
+            Rect.fromLTWH(headC.dx + hr * 0.34, headC.dy + hr * 0.26,
+                hr * 0.17, hr * 0.26),
             const Radius.circular(1.6),
           ),
           Paint()..color = Colors.white,
         );
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromLTWH(headC.dx + hr * 0.46, headC.dy + hr * 0.3,
-                hr * 0.16, hr * 0.24),
+            Rect.fromLTWH(headC.dx + hr * 0.55, headC.dy + hr * 0.24,
+                hr * 0.17, hr * 0.26),
             const Radius.circular(1.6),
           ),
           Paint()..color = Colors.white,
@@ -1115,50 +1784,149 @@ class _PetScenePainter extends CustomPainter {
       case 'snout':
         canvas.drawOval(
           Rect.fromCenter(
-            center: headC + Offset(hr * 0.58, hr * 0.12),
-            width: hr * 0.6,
-            height: hr * 0.46,
+            center: headC + Offset(hr * 0.66, hr * 0.14),
+            width: hr * 0.56,
+            height: hr * 0.5,
           ),
           Paint()..color = const Color(0xFFE88AA0),
         );
-        canvas.drawCircle(headC + Offset(hr * 0.5, hr * 0.12), hr * 0.07,
+        canvas.drawCircle(headC + Offset(hr * 0.58, hr * 0.14), hr * 0.065,
             Paint()..color = kInk);
-        canvas.drawCircle(headC + Offset(hr * 0.68, hr * 0.12), hr * 0.07,
+        canvas.drawCircle(headC + Offset(hr * 0.76, hr * 0.14), hr * 0.065,
             Paint()..color = kInk);
         break;
-      case 'topEyes':
-        break; // лягушонок обрабатывается в _paintHop
-      default:
-        // Добрая улыбка с носиком-точкой.
-        canvas.drawCircle(headC + Offset(hr * 0.52, hr * 0.1), hr * 0.1,
+      case 'foxMuzzle':
+        // Острая мордочка: клин к носу + светлая щёчка.
+        canvas.drawPath(
+          Path()
+            ..moveTo(headC.dx + hr * 0.05, headC.dy - hr * 0.30)
+            ..quadraticBezierTo(headC.dx + hr * 0.55, headC.dy - hr * 0.18,
+                headC.dx + hr * 1.06, headC.dy + hr * 0.10)
+            ..quadraticBezierTo(headC.dx + hr * 0.55, headC.dy + hr * 0.42,
+                headC.dx + hr * 0.10, headC.dy + hr * 0.34)
+            ..close(),
+          Paint()..color = body,
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(headC.dx + hr * 0.30, headC.dy + hr * 0.08)
+            ..quadraticBezierTo(headC.dx + hr * 0.62, headC.dy + hr * 0.12,
+                headC.dx + hr * 0.96, headC.dy + hr * 0.14)
+            ..quadraticBezierTo(headC.dx + hr * 0.58, headC.dy + hr * 0.34,
+                headC.dx + hr * 0.22, headC.dy + hr * 0.30)
+            ..close(),
+          Paint()..color = Colors.white.withOpacity(0.85),
+        );
+        canvas.drawCircle(headC + Offset(hr * 1.0, hr * 0.06), hr * 0.085,
             Paint()..color = kInk);
         canvas.drawArc(
           Rect.fromCenter(
-            center: headC + Offset(hr * 0.42, hr * 0.26),
-            width: hr * 0.56,
-            height: hr * 0.4,
+            center: headC + Offset(hr * 0.72, hr * 0.16),
+            width: hr * 0.36,
+            height: hr * 0.28,
           ),
           0.3,
-          2.4,
+          1.5,
           false,
           ink,
         );
         break;
-    }
-
-    // Усики тюленя (если вдруг в пруду рисуем морду на голове).
-    if (type == PetType.seal) {
-      final Paint whisk = Paint()
-        ..color = const Color(0xFF7A8896)
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round;
-      for (final double sy in <double>[-0.04, 0.1]) {
-        canvas.drawLine(
-          headC + Offset(hr * 0.4, hr * sy),
-          headC + Offset(hr * 1.05, hr * (sy - 0.06)),
-          whisk,
+      case 'catMuzzle':
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: headC + Offset(hr * 0.42, hr * 0.24),
+            width: hr * 0.72,
+            height: hr * 0.56,
+          ),
+          Paint()..color = belly,
         );
-      }
+        // Треугольный носик + рот «w».
+        canvas.drawPath(
+          Path()
+            ..moveTo(headC.dx + hr * 0.52, headC.dy + hr * 0.08)
+            ..lineTo(headC.dx + hr * 0.66, headC.dy + hr * 0.08)
+            ..lineTo(headC.dx + hr * 0.59, headC.dy + hr * 0.18)
+            ..close(),
+          Paint()..color = kInk,
+        );
+        canvas.drawArc(
+          Rect.fromCenter(
+            center: headC + Offset(hr * 0.47, hr * 0.22),
+            width: hr * 0.3,
+            height: hr * 0.24,
+          ),
+          0.1,
+          1.6,
+          false,
+          ink,
+        );
+        canvas.drawArc(
+          Rect.fromCenter(
+            center: headC + Offset(hr * 0.71, hr * 0.22),
+            width: hr * 0.3,
+            height: hr * 0.24,
+          ),
+          1.5,
+          1.6,
+          false,
+          ink,
+        );
+        // Усы.
+        final Paint whisk = Paint()
+          ..color = const Color(0xFF6E645A).withOpacity(0.75)
+          ..strokeWidth = 1.3
+          ..strokeCap = StrokeCap.round;
+        for (final double dy in <double>[-0.04, 0.08, 0.2]) {
+          canvas.drawLine(
+            headC + Offset(hr * 0.55, hr * (0.12 + dy)),
+            headC + Offset(hr * 1.15, hr * (dy * 1.5)),
+            whisk,
+          );
+        }
+        break;
+      case 'longMuzzle':
+        // Вытянутая морда оленя/единорога.
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(headC.dx + hr * 0.10, headC.dy - hr * 0.16,
+                hr * 1.14, hr * 0.52),
+            Radius.circular(hr * 0.26),
+          ),
+          Paint()..color = body,
+        );
+        canvas.drawCircle(headC + Offset(hr * 1.16, 0), hr * 0.10,
+            Paint()..color = kInk);
+        canvas.drawArc(
+          Rect.fromCenter(
+            center: headC + Offset(hr * 0.78, hr * 0.14),
+            width: hr * 0.5,
+            height: hr * 0.4,
+          ),
+          0.2,
+          1.9,
+          false,
+          ink,
+        );
+        break;
+      case 'topEyes':
+      case 'whaleMouth':
+        break; // лягушонок и кит рисуются отдельно
+      default:
+        // Добрая улыбка с носиком.
+        canvas.drawCircle(headC + Offset(hr * 0.55, hr * 0.06), hr * 0.10,
+            Paint()..color = kInk);
+        canvas.drawArc(
+          Rect.fromCenter(
+            center: headC + Offset(hr * 0.45, hr * 0.20),
+            width: hr * 0.56,
+            height: hr * 0.4,
+          ),
+          0.3,
+          2.2,
+          false,
+          ink,
+        );
+        break;
     }
   }
 
@@ -1956,6 +2724,7 @@ class _PetScenePainter extends CustomPainter {
   @override
   bool shouldRepaint(_PetScenePainter oldDelegate) =>
       oldDelegate.phase != phase ||
+      oldDelegate.tSec != tSec ||
       oldDelegate.pets.length != pets.length ||
       oldDelegate.sleeping != sleeping ||
       oldDelegate.weather != weather ||

@@ -6,9 +6,8 @@ import '../models/pet.dart';
 /// Данные используются процедурной отрисовкой: главный экран (PetCanvas),
 /// мини-игра кормления и карточки выбора. Меняя таблицу, меняем всех.
 ///
-/// v1.9.0: звери получили НАСТОЯЩЕЕ телосложение — голова на шее,
-/// горизонтальное тело, четыре лапы с походкой (quad), птицы на двух
-/// лапах (bird), прыгуны (hop).
+/// v2.0.0: звери выглядят как настоящие — профильный силуэт, один глаз,
+/// видовы морды (лисья, кошачья, оленья), лапы с коленом, повадки.
 class SpeciesStyle {
   const SpeciesStyle({
     required this.body,
@@ -37,7 +36,8 @@ class SpeciesStyle {
   /// Хвост: none|bushy|thin|curl|puff|fin.
   final String tail;
 
-  /// Морда: smile|beak|duckBeak|bearMuzzle|buckteeth|whaleMouth|topEyes|snout.
+  /// Морда: smile|beak|duckBeak|bearMuzzle|buckteeth|whaleMouth|topEyes|
+  /// snout|foxMuzzle|catMuzzle|longMuzzle.
   final String muzzle;
 
   /// Особые детали: none|spikes|patches|shell|wings|mask|horn|mane|
@@ -81,10 +81,14 @@ const Map<PetType, SpeciesStyle> kSpeciesStyles = <PetType, SpeciesStyle>{
       body: Color(0xFFFF9F45),
       ear: 'triangle',
       tail: 'bushy',
-      muzzle: 'smile',
+      muzzle: 'foxMuzzle',
       extra: 'spots'),
   PetType.cat: SpeciesStyle(
-      body: Color(0xFFA8B8C8), ear: 'triangle', tail: 'thin', bodyLen: 0.92),
+      body: Color(0xFFA8B8C8),
+      ear: 'triangle',
+      tail: 'thin',
+      muzzle: 'catMuzzle',
+      bodyLen: 0.92),
   PetType.dragon: SpeciesStyle(
       body: Color(0xFF62C46A),
       belly: Color(0xFFD9F2DC),
@@ -102,6 +106,7 @@ const Map<PetType, SpeciesStyle> kSpeciesStyles = <PetType, SpeciesStyle>{
       body: Color(0xFFC08552),
       belly: Color(0xFFF0DCBE),
       ear: 'round',
+      muzzle: 'foxMuzzle',
       extra: 'spikes',
       bodyLen: 0.94),
   PetType.panda: SpeciesStyle(
@@ -128,7 +133,7 @@ const Map<PetType, SpeciesStyle> kSpeciesStyles = <PetType, SpeciesStyle>{
       belly: Color(0xFFF7E7D2),
       ear: 'round',
       extra: 'antler',
-      muzzle: 'smile',
+      muzzle: 'longMuzzle',
       neck: 0.72,
       legLen: 1.18),
   PetType.squirrel: SpeciesStyle(
@@ -136,11 +141,13 @@ const Map<PetType, SpeciesStyle> kSpeciesStyles = <PetType, SpeciesStyle>{
       belly: Color(0xFFF4E3D2),
       ear: 'tuft',
       tail: 'bushy',
+      muzzle: 'foxMuzzle',
       bodyLen: 0.9),
   PetType.raccoon: SpeciesStyle(
       body: Color(0xFF9AA3AC),
       belly: Color(0xFFE5E9ED),
       ear: 'triangle',
+      muzzle: 'foxMuzzle',
       extra: 'mask'),
   PetType.koala: SpeciesStyle(
       body: Color(0xFFB5C4CE),
@@ -160,6 +167,7 @@ const Map<PetType, SpeciesStyle> kSpeciesStyles = <PetType, SpeciesStyle>{
       body: Color(0xFFF3EAFB),
       ear: 'triangle',
       extra: 'mane',
+      muzzle: 'longMuzzle',
       whiteBelly: true,
       neck: 0.72,
       legLen: 1.15),
