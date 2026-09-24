@@ -119,3 +119,27 @@ Stage Summary:
 - Репозиторий github.com/Detrit2014-oss/rostok: 11 коммитов, теги v1.2.0 и v1.8.0, рабочее дерево чистое.
 - Росток v1.8.0+9 полностью восстановлен и расширен: все пункты последнего запроса пользователя (сидящий питомец с ловлей ртом, кит лицом к экрану, цветная еда, настоящие лапы, лежачий сон, пруд) + квесты/сон/погода/открытки/сезоны/заморозка.
 - zip в download/ и public/. Правило на будущее: после каждого релиза git commit + git push.
+
+---
+Task ID: 7
+Agent: main
+Task: v1.9.0 — по баг-репорту пользователя: реалистичные звери на прогулке, замедление роста + возраст с бонусами, растения из семечка вместо яйца, фикс монетки-квадрата в магазине, гардероб (одежда/скины).
+
+Work Log:
+- pet_canvas.dart полностью переписан: quad-строение (голова на шее с ушами/мордой, горизонтальное тело, 4 лапы с чередующейся походкой по диагонали, виляющий хвост, тень), bird (2 лапки, переваливание), hop (прыжки), pond (кит с фонтаном/плавником и др.), грядка с семечком для растений (стадия 0), аксессуары (шапка/шарф/бантик/очки) + окрасы skinnedBody.
+- species_style.dart: новые поля build/neck/headScale/bodyLen/legLen; кролик/лягушка=hop, сова/утка/цыплёнок/пингвин=bird, олень/единорог=длинная шея; kPlantPets перенесён в pet.dart.
+- pet.dart: STAGE_THRESHOLDS [0,100,300,600] (рост ×20 медленнее), fromSeed, hat/neck/face/skin, claimedAges, ageDays, AGE_BONUSES {1:30,3:60,7:120,14:250,30:500,60:900,100:1500}, stage0Name='Семечко' для растений.
+- pet_service.dart: разовая миграция growthMinutes×20 (флаг migrate_growth_v19), гардероб (общий список), buyWardrobeItem/equipItem/claimAgeBonus, createPet(fromSeed для растений); storage_service.decodeJsonList.
+- Экраны Flutter: pet_screen (чип CoinIcon, карточка «Возраст» с кнопкой Забрать, plural дней), shop_screen (раздел «Гардероб питомца»: кепка80/шапочка120/корона400/шарф100/бантик90/очки150/тёмные200/окрасы 500/300/300), pet_selection («Сажаем семечко», подзаголовок про яйца/семена), profile/feeding_game/quest/achievement — 🪙 заменён/удалён.
+- common.dart: CoinIcon (CustomPaint золотая монета со звездой) + CoinText.
+- Демо 1:1: types.ts (пороги, AGE_BONUSES, WARDROBE_CATALOG, skinnedBodyColor, K_APP_VERSION 2.0.0), store.ts (schema v4: миграция ×20 + wardrobe + поля питомца; buyWardrobeItem/equipItem/claimAgeBonus), scene.tsx переписан (Quadruped/Bird/Hopper/PondCreature/SeedBed, SMIL-анимации Pace ±46px с разворотом scaleX(-1) и ног, ttg-blink CSS), shop-screen/pet-screen/pet-choice/profile/feeding-game/widgets (Coin/CoinText/CoinChip SVG).
+- Версии: pubspec 1.9.0+10, kAppVersion 1.9.0, update/version.json 1.9.0, public/version.json 2.0.0, CHANGELOG/README/download README, чек-скрипт 1.9.0.
+- Архив rostok_v1.9.0.zip (62 файла) в download/ и public/, старые удалены.
+- Проверки: check_flutter_project.py OK (40 dart), tsc 0 ошибок, eslint чисто.
+- E2E agent-browser: выбор Лисёнка → карточки с настоящими зверями; главный экран: монета-иконка в чипе, яйцо, «Возраст: 0 дней»; магазин: гардероб (Кепка 80, окрасы) с рисованой монетой; localStorage 150 мин → лисёнок-малыш ГУЛЯЕТ (разворот на краях, кепка на голове), 500 монет → куплена Кепка (−80, монеты 420), возраст 2 дня → подарок за 1 день забран (+30 → 450, claimedAges=[1]); кактусик из семечка → грядка на лужайке; профиль: «450 монеток» без квадрата; /version.json → 2.0.0. Скриншоты scripts/verify-901..914. localStorage очищен.
+- Git: коммит 16329ca + чистка временных файлов (f007b9f, 6463bfc), тег v1.9.0, push origin main --tags.
+
+Stage Summary:
+- Релиз v1.9.0+10 закрыл все 5 пунктов запроса пользователя; демо-версия 2.0.0 с баннером обновления.
+- GitHub: github.com/Detrit2014-oss/rostok — main + теги v1.2.0, v1.8.0, v1.9.0.
+- Правило соблюдено: релиз → коммит + push.
