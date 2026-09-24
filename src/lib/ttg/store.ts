@@ -50,6 +50,8 @@ interface TTGState {
   weekMinutes: number;
   /** Монетки (v1.5.0) — валюта магазина. */
   coins: number;
+  /** Заморозки серии 🧊 (v1.7.0), максимум 2. */
+  freezes: number;
   todayKey: string;
   lastSessionDayKey: string;
   weekKey: string;
@@ -101,6 +103,8 @@ interface TTGState {
   addCoins: (amount: number) => void;
   /** Купить рамку активному питомцу; false — не хватило монет. */
   buyFrame: (frameId: string, price: number) => boolean;
+  /** Купить заморозку серии 🧊; false — лимит/не хватает монет. */
+  buyFreeze: () => boolean;
   setTimeMachine: (v: boolean) => void;
   addDiaryEntry: (text: string) => DiaryEntry;
   applyLlmReply: (id: string, reply: string) => void;
@@ -172,6 +176,7 @@ export const useTTG = create<TTGState>()(
       streakDays: 0,
       weekMinutes: 0,
       coins: 0,
+      freezes: 0,
       todayKey: "",
       lastSessionDayKey: "",
       weekKey: "",
@@ -378,6 +383,14 @@ export const useTTG = create<TTGState>()(
         return true;
       },
 
+      buyFreeze: () => {
+        const s = get();
+        if (s.freezes >= 2) return false;
+        if (s.coins < 200) return false;
+        set({ coins: s.coins - 200, freezes: s.freezes + 1 });
+        return true;
+      },
+
       setTimeMachine: (v) => set({ timeMachine: v }),
 
       addDiaryEntry: (text) => {
@@ -518,6 +531,7 @@ export const useTTG = create<TTGState>()(
           streakDays: 0,
           weekMinutes: 0,
           coins: 0,
+          freezes: 0,
           lastSessionDayKey: "",
           sessionStartedAt: null,
           countedSec: 0,
@@ -540,6 +554,7 @@ export const useTTG = create<TTGState>()(
         streakDays: s.streakDays,
         weekMinutes: s.weekMinutes,
         coins: s.coins,
+        freezes: s.freezes,
         todayKey: s.todayKey,
         lastSessionDayKey: s.lastSessionDayKey,
         weekKey: s.weekKey,

@@ -13,6 +13,7 @@ import { formatDurationMinutes } from "@/lib/ttg/format";
 import { InfoCard, OutlineButton, StatTile } from "./widgets";
 import {
   Clock,
+  Coins,
   Flame,
   Link2,
   NotebookPen,
@@ -32,10 +33,64 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
+import {
+  ACHIEVEMENTS,
+  type AchievementStatsInput,
+  computeUnlocked,
+} from "@/lib/ttg/achievements";
+import { useMemo } from "react";
+
+function AchievementsCard() {
+  const pets = useTTG((s) => s.pets);
+  const totalMinutes = useTTG((s) => s.totalMinutes);
+  const streakDays = useTTG((s) => s.streakDays);
+  const coins = useTTG((s) => s.coins);
+  const diaryCount = useTTG((s) => s.diaryEntries.length);
+
+  const stats: AchievementStatsInput = { pets, totalMinutes, streakDays, coins, diaryCount };
+  const unlocked = useMemo(() => computeUnlocked(stats), [pets, totalMinutes, streakDays, coins, diaryCount]);
+
+  return (
+    <InfoCard className="mt-4">
+      <div className="flex items-center">
+        <p className="flex-1 text-[16px] font-extrabold" style={{ color: C.ink }}>
+          Достижения
+        </p>
+        <p className="text-[12.5px] font-bold" style={{ color: C.inkSoft }}>
+          {unlocked.size}/{ACHIEVEMENTS.length}
+        </p>
+      </div>
+      <p className="mt-1 text-[12.5px] leading-snug" style={{ color: C.inkSoft }}>
+        Открываются сами: за серию, питомцев, уровень и дневник.
+      </p>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {ACHIEVEMENTS.map((a) => {
+          const on = unlocked.has(a.id);
+          return (
+            <span
+              key={a.id}
+              title={on ? `${a.title} — ${a.desc}` : `${a.title} — ещё не открыто`}
+              className="flex h-[44px] w-[44px] items-center justify-center rounded-xl border-2 text-[20px]"
+              style={{
+                opacity: on ? 1 : 0.32,
+                backgroundColor: on ? C.greenSoft : "#F2F2F2",
+                borderColor: on ? C.green : C.border,
+              }}
+            >
+              {a.emoji}
+            </span>
+          );
+        })}
+      </div>
+    </InfoCard>
+  );
+}
+
 export function ProfileScreen() {
   const totalMinutes = useTTG((s) => s.totalMinutes);
   const streakDays = useTTG((s) => s.streakDays);
   const pets = useTTG((s) => s.pets);
+  const coins = useTTG((s) => s.coins);
   const diaryCount = useTTG((s) => s.diaryEntries.length);
   const focusTimeMachine = useTTG((s) => s.timeMachine);
   const setTimeMachine = useTTG((s) => s.setTimeMachine);
@@ -87,6 +142,12 @@ export function ProfileScreen() {
           color={C.orange}
         />
         <StatTile
+          icon={Coins}
+          value={`${coins}`}
+          label="монеток 🪙"
+          color={C.yellowDark}
+        />
+        <StatTile
           icon={PawPrint}
           value={`${adultCount(pets)}`}
           label="взрослых питомцев"
@@ -99,6 +160,9 @@ export function ProfileScreen() {
           color={C.blue}
         />
       </div>
+
+      {/* Достижения (v1.5.0) */}
+      <AchievementsCard />
 
       {/* Обновления */}
       <InfoCard className="mt-4">

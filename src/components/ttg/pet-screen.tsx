@@ -8,13 +8,16 @@ import {
   C,
   STAGE_NAMES,
   minutesToNextStage,
+  petLevelFromXp,
+  petLevelProgress,
   petStage,
   stageProgress,
 } from "@/lib/ttg/types";
 import { formatTimer } from "@/lib/ttg/format";
 import { PetScene } from "./scene";
 import { BigButton, Chip, InfoCard, ProgressBar } from "./widgets";
-import { CheckCircle2, Clock, Flame, Pencil, PhoneOff } from "lucide-react";
+import { ShopScreen } from "./shop-screen";
+import { CheckCircle2, Clock, Coins, Flame, Pencil, PhoneOff, Snowflake, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
@@ -36,6 +39,8 @@ export function PetScreen() {
   const pets = useTTG((s) => s.pets);
   const todayMinutes = useTTG((s) => s.todayMinutes);
   const streakDays = useTTG((s) => s.streakDays);
+  const coins = useTTG((s) => s.coins);
+  const freezes = useTTG((s) => s.freezes);
   const sessionStartedAt = useTTG((s) => s.sessionStartedAt);
   const countedSec = useTTG((s) => s.countedSec);
   const awaySinceMs = useTTG((s) => s.awaySinceMs);
@@ -47,6 +52,7 @@ export function PetScreen() {
 
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [shopOpen, setShopOpen] = useState(false);
 
   const running = sessionStartedAt !== null;
   const nowMs = useTTG((s) => s.nowMs);
@@ -62,22 +68,53 @@ export function PetScreen() {
   });
 
   return (
-    <div className="flex h-full flex-col" style={{ background: `linear-gradient(180deg, ${C.skyTop}, ${C.skyBottom})` }}>
+    <div
+      className="relative flex h-full flex-col"
+      style={{ background: `linear-gradient(180deg, ${C.skyTop}, ${C.skyBottom})` }}
+    >
+      {shopOpen && <ShopScreen onClose={() => setShopOpen(false)} />}
       {/* Чипы статистики */}
-      <div className="flex gap-2 px-4 pt-2">
+      <div className="flex flex-wrap gap-2 px-4 pt-2">
         <Chip icon={Clock} text={`Сегодня: ${todayMinutes} мин`} />
         <Chip icon={Flame} text={`Серия: ${streakDays}`} />
+        <Chip icon={Coins} text={`🪙 ${coins}`} />
+        {freezes > 0 && <Chip icon={Snowflake} text={`🧊 ×${freezes}`} />}
+        <button
+          type="button"
+          aria-label="Открыть магазин"
+          onClick={() => setShopOpen(true)}
+          className="ml-auto flex items-center gap-1.5 rounded-full border-[1.5px] bg-white/90 px-3 py-1.5 text-[12.5px] font-bold transition-transform active:scale-95"
+          style={{ borderColor: C.border, color: C.ink }}
+        >
+          <Store size={15} style={{ color: C.greenDark }} />
+          Магазин
+        </button>
       </div>
 
       {/* Сцена */}
       <div className="min-h-[190px] shrink-0 px-3 pt-2" style={{ height: "34%" }}>
         <div className="h-full w-full overflow-hidden rounded-[18px] border-2 bg-white" style={{ borderColor: C.border }}>
-          <PetScene pets={pets} sleeping={running} />
+          <PetScene pets={pets} sleeping={running} frame={active?.frame ?? "none"} />
         </div>
       </div>
 
       {/* Управление */}
       <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-4 pt-3">
+        {active && (
+          <InfoCard>
+            <div className="flex items-center">
+              <span className="text-[13.5px] font-extrabold" style={{ color: C.ink }}>
+                {active.name} · Ур. {petLevelFromXp(active.xp ?? 0)}
+              </span>
+              <span className="ml-auto text-[12px] font-bold" style={{ color: C.inkSoft }}>
+                {active.xp ?? 0} XP
+              </span>
+            </div>
+            <div className="mt-1.5">
+              <ProgressBar value={petLevelProgress(active.xp ?? 0)} />
+            </div>
+          </InfoCard>
+        )}
         {running ? (
           <div
             className="w-full rounded-[20px] p-4 text-center"

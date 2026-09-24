@@ -8,6 +8,7 @@ import '../services/pet_service.dart';
 import '../widgets/common.dart';
 import '../widgets/pet_canvas.dart';
 import 'pet_selection_screen.dart';
+import 'shop_screen.dart';
 
 /// Главный экран: сцена с питомцем + управление сессией детокса.
 class PetScreen extends StatelessWidget {
@@ -28,7 +29,18 @@ class PetScreen extends StatelessWidget {
     final Pet? active = pet.activePet;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Росток')),
+      appBar: AppBar(
+        title: const Text('Росток'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Магазин',
+            icon: const Icon(Icons.storefront_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ShopScreen()),
+            ),
+          ),
+        ],
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -42,13 +54,17 @@ class PetScreen extends StatelessWidget {
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: Row(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: <Widget>[
                     _chip(context, Icons.schedule_rounded,
                         'Сегодня: ${pet.todayMinutes} мин'),
-                    const SizedBox(width: 8),
                     _chip(context, Icons.local_fire_department_rounded,
                         'Серия: ${pet.streakDays}'),
+                    _chip(context, Icons.paid_rounded, '🪙 ${pet.coins}'),
+                    if (pet.freezes > 0)
+                      _chip(context, Icons.ac_unit_rounded, '🧊 ×${pet.freezes}'),
                   ],
                 ),
               ),
@@ -63,6 +79,7 @@ class PetScreen extends StatelessWidget {
                       child: PetCanvas(
                         pets: pet.pets,
                         sleeping: session.isRunning,
+                        frame: active?.frame ?? 'none',
                       ),
                     ),
                   ),
@@ -74,6 +91,49 @@ class PetScreen extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   child: Column(
                     children: <Widget>[
+                      if (active != null)
+                        InfoCard(
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Text(
+                                    '${active.name} · Ур. ${active.level}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13.5,
+                                      color: Palette.ink,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    '${active.xp} XP',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                      color: Palette.inkSoft,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: LinearProgressIndicator(
+                                  value: active.levelProgress,
+                                  minHeight: 8,
+                                  backgroundColor: const Color(0xFFE8F4E0),
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                          Palette.green),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 12),
                       if (session.isRunning)
                         _runningCard(context, session)
                       else

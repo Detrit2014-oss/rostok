@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../core/app_version.dart';
 import '../core/theme.dart';
 import '../core/utils.dart';
+import '../models/achievement.dart';
+import '../services/achievement_service.dart';
 import '../services/challenge_service.dart';
 import '../services/diary_service.dart';
 import '../services/focus_session_service.dart';
@@ -23,6 +25,15 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Пересчёт достижений при каждом открытии профиля — быстрая операция.
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      if (mounted) context.read<AchievementService>().recompute();
+    });
+  }
+
   Future<void> _checkUpdates() async {
     final UpdateService update = context.read<UpdateService>();
     await update.check(manual: true);
@@ -217,6 +228,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final FocusSessionService focus = context.watch<FocusSessionService>();
     final UpdateService update = context.watch<UpdateService>();
     final LlmService llm = context.watch<LlmService>();
+    final AchievementService achievements = context.watch<AchievementService>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Профиль')),
@@ -244,6 +256,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Palette.orange,
                 ),
                 StatTile(
+                  icon: Icons.paid_rounded,
+                  value: '${pet.coins}',
+                  label: 'монеток 🪙',
+                  color: Palette.yellowDark,
+                ),
+                StatTile(
                   icon: Icons.pets_rounded,
                   value: '${pet.adultCount}',
                   label: 'взрослых питомцев',
@@ -256,6 +274,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Palette.blue,
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            InfoCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      const Expanded(
+                        child: Text('Достижения',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 16)),
+                      ),
+                      Text(
+                        '${achievements.count}/${achievements.total}',
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: Palette.inkSoft),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Открываются сами: за серию, питомцев, уровень и дневник.',
+                    style: TextStyle(
+                        fontSize: 12.5, height: 1.4, color: Palette.inkSoft),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      for (final Achievement a in Achievement.kAchievements)
+                        Tooltip(
+                          message: achievements.unlocked.contains(a.id)
+                              ? '${a.title} — ${a.description}'
+                              : '${a.title} — ещё не открыто',
+                          child: Opacity(
+                            opacity: achievements.unlocked.contains(a.id)
+                                ? 1
+                                : 0.32,
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: achievements.unlocked.contains(a.id)
+                                    ? Palette.greenSoft
+                                    : const Color(0xFFF2F2F2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: achievements.unlocked.contains(a.id)
+                                      ? Palette.green
+                                      : Palette.border,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  a.emoji,
+                                  style: const TextStyle(fontSize: 20),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             InfoCard(

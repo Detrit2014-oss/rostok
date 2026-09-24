@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
+import 'services/achievement_service.dart';
 import 'services/challenge_backend.dart';
 import 'services/challenge_service.dart';
 import 'services/diary_service.dart';
@@ -32,6 +33,12 @@ Future<void> main() async {
 
   final UpdateService updateService = UpdateService(storage)..load();
 
+  // Достижения (v1.5.0): считаются по статистике питомцев и дневника.
+  final AchievementService achievementService =
+      AchievementService(storage, petService)
+        ..diaryCountProvider = () => diaryService.entries.length
+        ..load();
+
   // Сессия детокса считается по реальному времени: приложение свёрнуто —
   // телефон отложен — питомец растёт. Следим за жизненным циклом.
   WidgetsBinding.instance.addObserver(focusService);
@@ -46,6 +53,8 @@ Future<void> main() async {
         ChangeNotifierProvider<DiaryService>.value(value: diaryService),
         ChangeNotifierProvider<ChallengeService>.value(value: challengeService),
         ChangeNotifierProvider<UpdateService>.value(value: updateService),
+        ChangeNotifierProvider<AchievementService>.value(
+            value: achievementService),
       ],
       child: const TimeToGrowApp(),
     ),
@@ -54,5 +63,6 @@ Future<void> main() async {
   // Первая проверка обновлений — через 3 секунды, без блокировки UI.
   Future<void>.delayed(const Duration(seconds: 3), () {
     updateService.check();
+    achievementService.recompute();
   });
 }

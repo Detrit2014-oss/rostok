@@ -25,6 +25,9 @@ class PetService extends ChangeNotifier {
   /// Тратятся в магазине на рамки, еду и заморозку серии 🧊 (v1.7.0).
   int coins = 0;
 
+  /// Заморозки серии 🧊 (v1.7.0): спасают streak при пропуске дня.
+  int freezes = 0;
+
   String _todayKey = '';
   String _lastSessionDayKey = '';
   String _weekKey = '';
@@ -41,6 +44,10 @@ class PetService extends ChangeNotifier {
   static const String _kWeekMinutes = 'stats_week_minutes';
   static const String _kWeekKey = 'stats_week_key';
   static const String _kCoins = 'economy_coins';
+  static const String _kFreezes = 'economy_freezes';
+
+  /// Цена заморозки серии в магазине (v1.7.0).
+  static const int kFreezePrice = 200;
 
   /// Текущий питомец — тот, что ещё не вырос.
   Pet? get activePet {
@@ -73,6 +80,7 @@ class PetService extends ChangeNotifier {
     streakDays = _storage.getInt(_kStreak);
     weekMinutes = _storage.getInt(_kWeekMinutes);
     coins = _storage.getInt(_kCoins);
+    freezes = _storage.getInt(_kFreezes);
     _todayKey = _storage.getString(_kTodayKey);
     _lastSessionDayKey = _storage.getString(_kLastDay);
     _weekKey = _storage.getString(_kWeekKey);
@@ -175,6 +183,11 @@ class PetService extends ChangeNotifier {
           _dayKey(DateTime.now().subtract(const Duration(days: 1)));
       if (_lastSessionDayKey == yesterday) {
         streakDays += 1;
+      } else if (freezes > 0) {
+        // 🧊 Заморозка спасает серию (v1.7.0).
+        freezes -= 1;
+        _storage.setInt(_kFreezes, freezes);
+        streakDays += 1;
       } else {
         streakDays = 1;
       }
@@ -229,6 +242,16 @@ class PetService extends ChangeNotifier {
     return true;
   }
 
+  /// Купить заморозку серии 🧊 (v1.7.0) — максимум 2 в запасе.
+  bool buyFreeze() {
+    if (freezes >= 2) return false;
+    if (!spendCoins(kFreezePrice)) return false;
+    freezes += 1;
+    _storage.setInt(_kFreezes, freezes);
+    notifyListeners();
+    return true;
+  }
+
   void _persistPets() {
     _storage.setString(
       _kPets,
@@ -243,6 +266,7 @@ class PetService extends ChangeNotifier {
     streakDays = 0;
     weekMinutes = 0;
     coins = 0;
+    freezes = 0;
     lastEvolvedPetName = null;
     _lastSessionDayKey = '';
     _storage.setInt(_kTotal, 0);
@@ -250,6 +274,7 @@ class PetService extends ChangeNotifier {
     _storage.setInt(_kStreak, 0);
     _storage.setInt(_kWeekMinutes, 0);
     _storage.setInt(_kCoins, 0);
+    _storage.setInt(_kFreezes, 0);
     _storage.setString(_kLastDay, '');
     // Коллекция пуста → приложение снова покажет экран выбора питомца.
     _persistPets();
