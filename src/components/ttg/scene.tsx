@@ -1,38 +1,39 @@
 "use client";
 
-// Порт lib/widgets/pet_canvas.dart (v2.0.0): небо, солнце, облака, лужайка,
-// пруд для водных питомцев, погода (дождь/снег/туман/гроза) и 30 персонажей,
-// нарисованных полностью процедурно (SVG) — ни одной картинки.
-// v2.0.0 «Настоящие звери»: анатомия в профиль (силуэт с грудью/крупом,
-// лапы с коленом, один глаз, видовы морды) и НАСТОЯЩИЕ ПОВАДКИ — зверь
-// гуляет, останавливается принюхаться, пощипать траву, сесть или поклевать.
-// Бабочки порхают, трава качается.
+// Порт lib/widgets/pet_canvas.dart (v2.1.0 «Настоящие звери»): небо, солнце,
+// облака, лужайка, грядка растений, пруд справа, погода (дождь/снег/туман/
+// гроза) — процедурные. Питомцы — РЕАЛИСТИЧНЫЕ ИЛЛЮСТРАЦИИ-СПРАЙТЫ
+// (public/sprites/<вид>.webp), оживлённые повадками: зверь гуляет по полосам
+// глубины, принюхивается, щиплет траву, сидит; птицы клюют; зайчик прыгает;
+// водные жители патрулируют пруд; спящие звери ЛЕЖАТ (поза сна).
+// Аксессуары гардероба рисуются по якорям спрайта.
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import {
-  bellyColor,
+  GEOM,
+  SPRITE_META,
+  anchorsFor,
   bodyColor,
+  HOP_PETS,
   isAquatic,
   isPlant,
+  laneScales,
+  laneYs,
   Pet,
   petStage,
-  skinnedBellyColor,
-  skinnedBodyColor,
-  skinnedShadeColor,
-  speciesStyle,
+  spriteAsset,
+  spriteAspect,
+  spriteStageScale,
   stageProgress,
 } from "@/lib/ttg/types";
-import type { PetType, SpeciesStyle } from "@/lib/ttg/types";
+import type { PetType } from "@/lib/ttg/types";
 
-const GROUND_Y = 182.4; // 0.76 * 240
-const BEAK = "#FF9500";
-const DARK = "#3A3A3A";
-const SPIKE = "#8B5E34";
+const VB_W = 400;
+const VB_H = 240;
+const GROUND_Y = VB_H * GEOM.groundYF; // 177.6
 const CRACK = "#C9A96E";
-const POT = "#CB7B4E";
-const POT_DARK = "#A85F38";
 const SOIL = "#7A4E2D";
 const STEM = "#5FA052";
 
@@ -107,1255 +108,23 @@ function Egg({ spot, progress }: { spot: string; progress: number }) {
   );
 }
 
-/** Растение в горшочке (6 видов). */
-function Plant({ s, type, sleeping }: { s: number; type: PetType; sleeping: boolean }) {
-  const body = bodyColor(type);
-  const topY = -30 * s;
+/** Семечко на грядке (растения, стадия 0). */
+function SeedBed({ progress }: { progress: number }) {
+  const s = 1;
   return (
     <g>
-      {/* Горшочек */}
-      <path
-        d={`M ${-15 * s} ${-26 * s} L ${15 * s} ${-26 * s} L ${11 * s} 0 L ${-11 * s} 0 Z`}
-        fill={POT}
-      />
-      <rect x={-16 * s} y={-29 * s} width={32 * s} height={5 * s} fill={POT_DARK} />
-      <rect x={-12.5 * s} y={-26 * s} width={25 * s} height={4 * s} fill={SOIL} />
-
-      {type === "cactus" && (
-        <g>
-          <rect x={-7 * s} y={topY - 29 * s} width={14 * s} height={30 * s} rx={7 * s} fill={body} />
-          <rect x={-19 * s} y={topY - 22 * s} width={8 * s} height={14 * s} rx={4 * s} fill={body} />
-          <rect x={11 * s} y={topY - 26 * s} width={8 * s} height={16 * s} rx={4 * s} fill={body} />
-          {Array.from({ length: 6 }, (_, i) => (
-            <circle
-              key={i}
-              cx={(((i * 13) % 12) - 6) * s}
-              cy={topY - 6 * s - i * 4.4 * s}
-              r={1.1 * s}
-              fill="#FFFFFF"
-              opacity="0.85"
-            />
-          ))}
-          {s >= 0.55 + 2 * 0.22 && (
-            <g>
-              <circle cx={0} cy={topY - 30 * s} r={4 * s} fill="#FF8FB1" />
-              <circle cx={0} cy={topY - 30 * s} r={1.6 * s} fill="#FFFFFF" />
-            </g>
-          )}
-        </g>
-      )}
-
-      {type === "bonsai" && (
-        <g>
-          <path
-            d={`M 0 ${-26 * s} Q ${6 * s} ${topY + 12 * s} ${-3 * s} ${topY + 2 * s}`}
-            stroke={SPIKE}
-            strokeWidth={4.6 * s}
-            strokeLinecap="round"
-            fill="none"
-          />
-          <circle cx={-4 * s} cy={topY - 4 * s} r={9 * s} fill={body} />
-          <circle cx={6 * s} cy={topY - 8 * s} r={7.4 * s} fill={body} opacity="0.9" />
-          <circle cx={0} cy={topY - 13 * s} r={6 * s} fill={body} opacity="0.8" />
-        </g>
-      )}
-
-      {type === "succulent" && (
-        <g>
-          {Array.from({ length: 6 }, (_, i) => {
-            const a = -Math.PI + (i * Math.PI) / 5;
-            return (
-              <g key={i} transform={`translate(0 ${topY - 3 * s}) rotate(${((a + Math.PI / 2) * 180) / Math.PI})`}>
-                <ellipse
-                  cx={0}
-                  cy={-6.2 * s}
-                  rx={2.7 * s}
-                  ry={5.5 * s}
-                  fill={i % 2 === 0 ? body : `color-mix(in srgb, ${body} 82%, white)`}
-                />
-              </g>
-            );
-          })}
-          <circle cx={0} cy={topY - 3 * s} r={4.2 * s} fill="#D8E8C8" />
-        </g>
-      )}
-
-      {type === "sunflower" && (
-        <g>
-          <rect x={-1.8 * s} y={topY} width={3.6 * s} height={14 * s} fill={STEM} />
-          <ellipse cx={-7 * s} cy={topY + 7 * s} rx={4.5 * s} ry={2.2 * s} fill={STEM} />
-          <ellipse cx={7 * s} cy={topY + 10 * s} rx={4.5 * s} ry={2.2 * s} fill={STEM} />
-          {Array.from({ length: 8 }, (_, i) => {
-            const a = (i * Math.PI) / 4;
-            return (
-              <ellipse
-                key={i}
-                cx={Math.cos(a) * 9 * s}
-                cy={topY - 6 * s + Math.sin(a) * 9 * s}
-                rx={4 * s}
-                ry={2.5 * s}
-                fill={body}
-                transform={`rotate(${(a * 180) / Math.PI} ${Math.cos(a) * 9 * s} ${topY - 6 * s + Math.sin(a) * 9 * s})`}
-              />
-            );
-          })}
-          <circle cx={0} cy={topY - 6 * s} r={6.4 * s} fill={SOIL} />
-          {s >= 0.55 + 0.22 && (
-            <g fill="#FFFFFF">
-              <circle cx={-2.4 * s} cy={topY - 7 * s} r={1.3 * s} />
-              <circle cx={2.4 * s} cy={topY - 7 * s} r={1.3 * s} />
-            </g>
-          )}
-        </g>
-      )}
-
-      {type === "clover" && (
-        <g>
-          {[-7, 0, 7].map((sx) => (
-            <g key={sx} transform={`translate(${sx * s} ${topY - 2 * s}) rotate(${sx * 2})`}>
-              <circle cx={0} cy={-3.4 * s} r={4.6 * s} fill={body} />
-              <circle cx={0} cy={3.4 * s} r={4.6 * s} fill={body} opacity="0.85" />
-            </g>
-          ))}
-          {s >= 0.55 + 2 * 0.22 && (
-            <circle cx={0} cy={topY - 14 * s} r={2.6 * s} fill="#FFD166" />
-          )}
-        </g>
-      )}
-
-      {type === "sprout" && (
-        <g>
-          <rect x={-1.6 * s} y={topY + 4 * s} width={3.2 * s} height={12 * s} fill={STEM} />
-          <path
-            d={`M 0 ${topY + 5 * s} Q ${-13 * s} ${topY + 2 * s} ${-11 * s} ${topY - 7 * s} Q ${-3 * s} ${topY - 4 * s} 0 ${topY + 5 * s} Z`}
-            fill={body}
-          />
-          <path
-            d={`M 0 ${topY + 5 * s} Q ${13 * s} ${topY + 2 * s} ${11 * s} ${topY - 7 * s} Q ${3 * s} ${topY - 4 * s} 0 ${topY + 5 * s} Z`}
-            fill={body}
-            opacity="0.88"
-          />
-        </g>
-      )}
-
-      {sleeping && (
-        <g className="ttg-zzz" fill="#6B7B8C" fontWeight="800">
-          <text x={18 * s} y={-44 * s} fontSize={11 * s} opacity="0.9">z</text>
-          <text x={27 * s} y={-54 * s} fontSize={14 * s} opacity="0.7">z</text>
-          <text x={36 * s} y={-64 * s} fontSize={17 * s} opacity="0.5">Z</text>
-        </g>
-      )}
-    </g>
-  );
-}
-
-// ── v2.0.0: настоящие звери ───────────────────────────────────────
-// Звери ходят по лужайке с повадками: силуэт с грудью/крупом, лапы с
-// коленом, один глаз, видовы морды; паузы — принюхивание/пастьба/сидя/клюёт.
-// Гардероб (шапки/шарфы/очки/окрасы) рисуется прямо на питомце.
-
-interface AnimalProps {
-  s: number;
-  type: PetType;
-  sleeping: boolean;
-  pet: Pet;
-}
-
-/** Ходьба по лужайке: треугольная волна + разворот в концах. */
-
-// ── Повадки настоящих зверей (v2.0.0) — порт _petBehavior из Dart ──────
-const STROLL_PERIOD = 21; // цикл «прогулка + пауза», с
-const PAUSE_AT = 13.5; // начало паузы внутри цикла
-const PAUSE_LEN = 3.8; // длительность паузы, с
-const CROSS_SEC = 8.2; // полпути через лужайку, с
-
-interface PetBehavior {
-  x: number; // позиция на лужайке 0..1
-  facing: number; // 1 вправо / -1 влево
-  kind: "walk" | "sniff" | "graze" | "sit" | "peck" | "look";
-  headPitch: number; // наклон головы вниз, рад
-  stride: number; // фаза шага, рад (на паузе замирает)
-  poseEase: number; // 0..1 плавный вход в позу
-}
-
-const GRAZERS: PetType[] = ["deer", "unicorn", "bunny", "squirrel", "pig", "koala", "panda", "dragon", "hedgehog"];
-const PERCHERS: PetType[] = ["fox", "cat", "dog", "raccoon", "bear"];
-const PECKERS: PetType[] = ["owl", "duck", "chick", "penguin"];
-
-function strHash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) & 0x7fffffff;
-  return h >>> 0;
-}
-
-function pbHash(a: number, b: number): number {
-  let h = (a * 374761393 + b * 668265263) % 2147483647;
-  if (h < 0) h += 2147483647;
-  h = ((h ^ (h >> 13)) * 1274126177) % 2147483647;
-  if (h < 0) h += 2147483647;
-  return (((h ^ (h >> 16)) >>> 0) % 2147483647) / 2147483647;
-}
-
-function petBehavior(pet: Pet, tSec: number): PetBehavior {
-  const seed = strHash(pet.id);
-  const off = (seed % 1900) / 100; // у каждого зверя своё расписание
-  const total = tSec + off;
-  const local = total % STROLL_PERIOD;
-  const cycle = Math.floor(total / STROLL_PERIOD);
-
-  // «Чистое» время шага: паузы не двигают зверя и не качают лапы.
-  const pauseDone = cycle * PAUSE_LEN + (local >= PAUSE_AT ? Math.min(local - PAUSE_AT, PAUSE_LEN) : 0);
-  const walkT = tSec - pauseDone;
-  const tri = ((walkT + off) / CROSS_SEC) % 2;
-  const x = tri < 1 ? tri : 2 - tri;
-  const facing = tri < 1 ? 1 : -1;
-  const stride = ((walkT + off) * 2 * Math.PI) / 0.8;
-
-  if (local < PAUSE_AT || local >= PAUSE_AT + PAUSE_LEN) {
-    return { x, facing, kind: "walk", headPitch: 0.05 + Math.sin(stride * 2) * 0.03, stride, poseEase: 0 };
-  }
-
-  // Пауза: что делает зверь — стабильно на весь цикл.
-  const r = pbHash(seed, cycle);
-  let kind: PetBehavior["kind"];
-  if (PECKERS.includes(pet.type)) kind = r < 0.62 ? "peck" : "look";
-  else if (PERCHERS.includes(pet.type)) kind = r < 0.4 ? "sniff" : r < 0.78 ? "sit" : "look";
-  else if (GRAZERS.includes(pet.type)) kind = r < 0.55 ? "graze" : r < 0.85 ? "sniff" : "look";
-  else kind = r < 0.5 ? "sniff" : "look";
-
-  const tin = Math.min(1, Math.max(0, (local - PAUSE_AT) / 0.7));
-  const tout = Math.min(1, Math.max(0, (PAUSE_AT + PAUSE_LEN - local) / 0.7));
-  const smooth = Math.min(tin, tout) ** 2 * (3 - 2 * Math.min(tin, tout));
-
-  let target: number;
-  if (kind === "graze") target = 1.0 + Math.sin(tSec * 8.5) * 0.06;
-  else if (kind === "sniff") target = 0.62 + Math.sin(tSec * 7) * 0.07;
-  else if (kind === "peck") {
-    const pp = (((local - PAUSE_AT) / PAUSE_LEN) * 3) % 1;
-    target = Math.abs(Math.sin(pp * Math.PI)) * 0.85;
-  } else target = 0.1 + Math.sin(tSec * 1.6) * 0.12;
-
-  return { x, facing, kind, headPitch: target * smooth, stride, poseEase: smooth };
-}
-
-/** rAF-движок повадок: ~24 к/с, SSR-безопасно (до монтирования — пауза). */
-function useBehavior(pet: Pet, active: boolean): PetBehavior | null {
-  const [bhv, setBhv] = useState<PetBehavior | null>(null);
-  const petRef = useRef(pet);
-  useEffect(() => {
-    petRef.current = pet;
-  }, [pet]);
-  useEffect(() => {
-    if (!active) return;
-    let raf = 0;
-    let last = 0;
-    const t0 = performance.now();
-    const tick = (now: number) => {
-      raf = requestAnimationFrame(tick);
-      if (now - last < 42) return;
-      last = now;
-      setBhv(petBehavior(petRef.current, (now - t0) / 1000));
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [active, pet.id]);
-  return active ? bhv : null;
-}
-
-/** Лапа с коленом: бедро, голень и лапка с пальцами (углы из повадок). */
-function LegV2({
-  hx, hy, len, w, color, swing, rear,
-}: {
-  hx: number; hy: number; len: number; w: number;
-  color: string; swing: number; rear?: boolean;
-}) {
-  const knee = Math.max(0, -Math.sin(swing)) * 0.5;
-  return (
-    <g transform={`translate(${hx} ${hy}) rotate(${(swing * 180) / Math.PI})`}>
-      <ellipse cx={0} cy={len * 0.06} rx={w * (rear ? 1.05 : 0.85)} ry={len * 0.275} fill={color} />
-      <rect x={-w / 2} y={0} width={w} height={len * 0.58} rx={w * 0.45} fill={color} />
-      <g transform={`translate(0 ${len * 0.54}) rotate(${(knee * 180) / Math.PI})`}>
-        <rect x={-w * 0.42} y={0} width={w * 0.84} height={len * 0.46} rx={w * 0.4} fill={color} />
-        <ellipse cx={w * 0.1} cy={len * 0.44} rx={w * 0.775} ry={w * 0.475} fill={color} />
-        {[-1, 0, 1].map((t) => (
-          <circle key={t} cx={w * 0.1 + t * w * 0.42} cy={len * 0.44 + w * 0.12} r={w * 0.13} fill="#FFFFFF" opacity="0.28" />
-        ))}
-      </g>
-    </g>
-  );
-}
-
-/** Хвост четвероногого: пышный с белым кончиком, тонкий, колечком, помпон. */
-function TailV2({
-  ax, ay, bw, bh, kind, body, wag, wrap, s,
-}: {
-  ax: number; ay: number; bw: number; bh: number;
-  kind: string; body: string; wag: boolean; wrap?: boolean; s: number;
-}) {
-  if (wrap) {
-    // Сидит: хвост обёрнут вокруг крупа.
-    const ring = {
-      cx: ax + bw * 0.1, cy: ay + bh * 0.12,
-      rx: bw * 0.22, ry: bh * 0.27,
-    };
-    return (
-      <g>
-        <ellipse cx={ring.cx} cy={ring.cy} rx={ring.rx} ry={ring.ry} stroke={body}
-          strokeWidth={kind === "bushy" ? 10 * s : 5 * s} fill="none"
-          strokeDasharray={`${ring.rx * 2.6} ${ring.rx * 6}`} transform={`rotate(24 ${ring.cx} ${ring.cy})`} strokeLinecap="round" />
-        {kind === "bushy" && (
-          <ellipse cx={ring.cx} cy={ring.cy} rx={ring.rx} ry={ring.ry} stroke="#FFFFFF" opacity="0.8"
-            strokeWidth={10 * s} fill="none"
-            strokeDasharray={`${ring.rx * 0.9} ${ring.rx * 6}`} transform={`rotate(24 ${ring.cx} ${ring.cy})`} strokeLinecap="round" />
-        )}
-      </g>
-    );
-  }
-  let art: React.ReactNode = null;
-  if (kind === "bushy") {
-    art = (
-      <g>
-        <path
-          d={`M 0 ${bh * 0.12} C ${-bw * 0.3} ${bh * 0.3} ${-bw * 0.55} ${bh * 0.22} ${-bw * 0.7} 0 C ${-bw * 0.8} ${-bh * 0.14} ${-bw * 0.72} ${-bh * 0.34} ${-bw * 0.56} ${-bh * 0.3} C ${-bw * 0.62} ${-bh * 0.18} ${-bw * 0.52} ${-bh * 0.02} ${-bw * 0.3} ${bh * 0.02} C ${-bw * 0.18} ${bh * 0.05} ${-bw * 0.08} ${bh * 0.1} 0 ${bh * 0.12} Z`}
-          fill={body}
-        />
-        <path
-          d={`M ${-bw * 0.7} 0 C ${-bw * 0.8} ${-bh * 0.14} ${-bw * 0.72} ${-bh * 0.34} ${-bw * 0.56} ${-bh * 0.3} C ${-bw * 0.6} ${-bh * 0.16} ${-bw * 0.58} ${-bh * 0.06} ${-bw * 0.52} ${bh * 0.02} C ${-bw * 0.58} ${bh * 0.04} ${-bw * 0.65} ${bh * 0.03} ${-bw * 0.7} 0 Z`}
-          fill="#FFFFFF"
-          opacity="0.85"
-        />
-      </g>
-    );
-  } else if (kind === "thin") {
-    art = (
-      <path
-        d={`M 0 ${bh * 0.2} C ${-bw * 0.26} ${bh * 0.3} ${-bw * 0.36} ${bh * 0.02} ${-bw * 0.22} ${-bh * 0.34} Q ${-bw * 0.16} ${-bh * 0.46} ${-bw * 0.06} ${-bh * 0.4}`}
-        stroke={body}
-        strokeWidth={5 * s}
-        strokeLinecap="round"
-        fill="none"
-      />
-    );
-  } else if (kind === "curl") {
-    art = (
-      <circle
-        cx={-bw * 0.06}
-        cy={0}
-        r={6.5 * s}
-        stroke={body}
-        strokeWidth={5 * s}
-        fill="none"
-      />
-    );
-  } else if (kind === "puff") {
-    art = <ellipse cx={-bw * 0.05} cy={0} rx={bw * 0.1} ry={bh * 0.15} fill="#FFFFFF" opacity="0.85" />;
-  }
-  if (!art) return null;
-  return (
-    <g transform={`translate(${ax} ${ay})`}>
-      <g>
-        {wag && (
-          <animateTransform
-            attributeName="transform" type="rotate"
-            values="-8;8;-8" dur="0.62s" repeatCount="indefinite"
-          />
-        )}
-        {art}
-      </g>
-    </g>
-  );
-}
-
-/** Детали спины: иголки, крылья, пятна. */
-function BackDetails({
-  bodyCy, bw, bh, st, body, s, stage,
-}: {
-  bodyCy: number; bw: number; bh: number;
-  st: SpeciesStyle; body: string; s: number; stage: number;
-}) {
-  const extra = st.extra ?? "none";
-  if (extra === "spikes") {
-    return (
-      <g fill={SPIKE}>
-        {[-2.6, -2.25, -1.9, -1.55, -1.2, -0.85].map((a) => {
-          const tipX = bw * 0.5 * 1.3 * Math.cos(a);
-          const tipY = bodyCy + bh * 0.5 * 1.5 * Math.sin(a);
-          const b1X = bw * 0.5 * Math.cos(a + 0.14);
-          const b1Y = bodyCy + bh * 0.5 * Math.sin(a + 0.14);
-          const b2X = bw * 0.5 * Math.cos(a - 0.14);
-          const b2Y = bodyCy + bh * 0.5 * Math.sin(a - 0.14);
-          return <polygon key={a} points={`${b1X},${b1Y} ${tipX},${tipY} ${b2X},${b2Y}`} />;
-        })}
-      </g>
-    );
-  }
-  if (extra === "wings" && stage >= 2) {
-    return (
-      <g fill={body} opacity="0.7">
-        <path
-          d={`M ${-bw * 0.05} ${bodyCy - bh * 0.3} Q ${-bw * 0.5} ${bodyCy - bh * 1.15} ${bw * 0.18} ${bodyCy - bh * 0.62} Z`}
-        />
-        <path
-          d={`M ${bw * 0.16} ${bodyCy - bh * 0.3} Q ${bw * 0.55} ${bodyCy - bh * 1.0} ${bw * 0.3} ${bodyCy - bh * 0.55} Z`}
-        />
-      </g>
-    );
-  }
-  if (extra === "spots") {
-    return (
-      <g fill="#FFFFFF" opacity="0.3">
-        <circle cx={-bw * 0.22} cy={bodyCy - bh * 0.2} r={3.6 * s} />
-        <circle cx={bw * 0.08} cy={bodyCy - bh * 0.28} r={2.8 * s} />
-      </g>
-    );
-  }
-  return null;
-}
-
-/** Грива единорога вдоль шеи. */
-function Mane({
-  bodyCy, headX, headY, s,
-}: { bodyCy: number; headX: number; headY: number; s: number }) {
-  const colors = ["#EF476F", "#FF9F45", "#FFD166", "#62C46A", "#1CB0F6"];
-  return (
-    <g>
-      {colors.map((c, i) => {
-        const t = i / (colors.length - 1);
-        return (
-          <circle
-            key={c}
-            cx={headX * t - 2 * s}
-            cy={bodyCy + (headY - bodyCy) * t - 2 * s}
-            r={5.5 * s}
-            fill={c}
-          />
-        );
-      })}
-    </g>
-  );
-}
-
-/** Уши на голове. */
-function Ears({
-  hx, hy, hr, st, body, belly, s,
-}: {
-  hx: number; hy: number; hr: number;
-  st: SpeciesStyle; body: string; belly: string; s: number;
-}) {
-  const ear = st.ear ?? "none";
-  if (ear === "triangle") {
-    return (
-      <g fill={body}>
-        {[-0.55, 0.35].map((sx) => (
-          <polygon
-            key={sx}
-            points={`${hx + hr * sx},${hy - hr * 0.55} ${hx + hr * (sx + 0.22)},${hy - hr * 1.45} ${hx + hr * (sx + 0.42)},${hy - hr * 0.5}`}
-          />
-        ))}
-      </g>
-    );
-  }
-  if (ear === "long") {
-    return (
-      <g>
-        {[-0.5, 0.3].map((sx) => (
-          <g key={sx}>
-            <rect
-              x={hx + hr * sx - hr * 0.22}
-              y={hy - hr * 2.3}
-              width={hr * 0.44}
-              height={hr * 1.9}
-              rx={hr * 0.22}
-              fill={body}
-            />
-            <rect
-              x={hx + hr * sx - hr * 0.1}
-              y={hy - hr * 1.9}
-              width={hr * 0.2}
-              height={hr * 1.3}
-              rx={hr * 0.1}
-              fill="#F5B8C4"
-            />
-          </g>
-        ))}
-      </g>
-    );
-  }
-  if (ear === "round") {
-    return (
-      <g>
-        {[-0.55, 0.55].map((sx) => (
-          <g key={sx}>
-            <circle cx={hx + hr * sx} cy={hy - hr * 0.72} r={hr * 0.42} fill={body} />
-            <circle cx={hx + hr * sx} cy={hy - hr * 0.72} r={hr * 0.2} fill={belly} />
-          </g>
-        ))}
-      </g>
-    );
-  }
-  if (ear === "pom") {
-    return (
-      <g fill={body}>
-        {[-0.55, 0.55].map((sx) => (
-          <circle key={sx} cx={hx + hr * sx} cy={hy - hr * 0.75} r={hr * 0.38} />
-        ))}
-      </g>
-    );
-  }
-  if (ear === "tuft") {
-    return (
-      <g fill={body}>
-        <circle cx={hx - hr * 0.2} cy={hy - hr * 0.95} r={hr * 0.17} />
-        <circle cx={hx} cy={hy - hr * 0.95} r={hr * 0.22} />
-        <circle cx={hx + hr * 0.2} cy={hy - hr * 0.95} r={hr * 0.17} />
-      </g>
-    );
-  }
-  if (ear === "horns") {
-    return (
-      <g fill="#F6E7C1">
-        {[-0.4, 0.4].map((sx) => (
-          <circle key={sx} cx={hx + hr * sx} cy={hy - hr * 0.8} r={hr * 0.18} />
-        ))}
-      </g>
-    );
-  }
-  return null;
-}
-
-/** Детали головы: маска енота, пятна панды, рог единорога, рога оленя. */
-function HeadDetails({
-  hx, hy, hr, st, s,
-}: { hx: number; hy: number; hr: number; st: SpeciesStyle; s: number }) {
-  const extra = st.extra ?? "none";
-  if (extra === "patches") {
-    return (
-      <g fill={DARK}>
-        <ellipse cx={hx - hr * 0.36} cy={hy - hr * 0.05} rx={hr * 0.36} ry={hr * 0.41} />
-        <ellipse cx={hx + hr * 0.36} cy={hy - hr * 0.05} rx={hr * 0.36} ry={hr * 0.41} />
-      </g>
-    );
-  }
-  if (extra === "mask") {
-    return (
-      <g fill="#5A5F66">
-        <ellipse cx={hx - hr * 0.36} cy={hy - hr * 0.05} rx={hr * 0.4} ry={hr * 0.33} />
-        <ellipse cx={hx + hr * 0.36} cy={hy - hr * 0.05} rx={hr * 0.4} ry={hr * 0.33} />
-      </g>
-    );
-  }
-  if (extra === "mane") {
-    return (
-      <polygon
-        points={`${hx - 3.6 * s},${hy - hr * 0.85} ${hx + 3.6 * s},${hy - hr * 0.85} ${hx},${hy - hr * 1.75}`}
-        fill="#FFD166"
-      />
-    );
-  }
-  if (extra === "antler") {
-    return (
-      <g stroke="#8B5E34" strokeWidth={3.4 * s} strokeLinecap="round" fill="none">
-        {[-0.45, 0.45].map((sx) => (
-          <path
-            key={sx}
-            d={`M ${hx + hr * sx} ${hy - hr * 0.7} L ${hx + hr * sx * 1.5} ${hy - hr * 1.7} M ${hx + hr * sx * 1.28} ${hy - hr * 1.25} L ${hx + hr * sx * 1.85} ${hy - hr * 1.45}`}
-          />
-        ))}
-      </g>
-    );
-  }
-  return null;
-}
-
-/** Морда в профиль: один глаз, нос, рот, усы (v2.0.0). */
-function Face({
-  hx, hy, hr, st, type, belly, s, sleeping, body,
-}: {
-  hx: number; hy: number; hr: number;
-  st: SpeciesStyle; type: PetType; belly: string; s: number; sleeping: boolean; body: string;
-}) {
-  const muzzle = st.muzzle ?? "smile";
-  const ex = hx + hr * 0.36;
-  const ey = hy - hr * 0.08;
-  const ink = "#3A3A3A";
-  return (
-    <g>
-      {/* Один глаз — как у настоящего зверя в профиль */}
-      {sleeping ? (
-        <path
-          d={`M ${ex - hr * 0.2} ${ey + hr * 0.06} Q ${ex} ${ey + hr * 0.18} ${ex + hr * 0.2} ${ey + hr * 0.06}`}
-          stroke={ink} strokeWidth={2.4} strokeLinecap="round" fill="none"
-        />
-      ) : (
-        <g className="ttg-blink">
-          <circle cx={ex} cy={ey} r={hr * 0.27} fill="#FFFFFF" />
-          <circle cx={ex + hr * 0.06} cy={ey + hr * 0.01} r={hr * 0.155} fill="#33261A" />
-          <circle cx={ex + hr * 0.13} cy={ey - hr * 0.09} r={hr * 0.055} fill="#FFFFFF" />
-        </g>
-      )}
-      {/* Румянец на щеке */}
-      <circle cx={hx - hr * 0.3} cy={hy + hr * 0.36} r={hr * 0.16} fill="#FF8FA3" opacity="0.45" />
-
-      {muzzle === "beak" && (
-        <path
-          d={`M ${hx + hr * 0.3} ${hy - hr * 0.02} L ${hx + hr * 0.3} ${hy + hr * 0.16} Q ${hx + hr * 0.55} ${hy + hr * 0.3} ${hx + hr * 1.02} ${hy + hr * 0.1} Z`}
-          fill={BEAK}
-        />
-      )}
-      {muzzle === "duckBeak" && (
-        <g>
-          <rect x={hx + hr * 0.12} y={hy - hr * 0.07} width={hr} height={hr * 0.42} rx={4 * s} fill={BEAK} />
-          <line x1={hx + hr * 0.3} y1={hy + hr * 0.14} x2={hx + hr * 1.08} y2={hy + hr * 0.1} stroke={ink} strokeOpacity="0.6" strokeWidth={1.6} strokeLinecap="round" />
-        </g>
-      )}
-      {muzzle === "bearMuzzle" && (
-        <g>
-          <ellipse cx={hx + hr * 0.4} cy={hy + hr * 0.28} rx={hr * 0.475} ry={hr * 0.33} fill={belly} />
-          <circle cx={hx + hr * 0.62} cy={hy + hr * 0.06} r={hr * 0.125} fill={DARK} />
-          <path d={`M ${hx + hr * 0.39} ${hy + hr * 0.36} A ${hr * 0.25} ${hr * 0.2} 0 0 0 ${hx + hr * 0.65} ${hy + hr * 0.36}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
-        </g>
-      )}
-      {muzzle === "buckteeth" && (
-        <g>
-          <path d={`M ${hx + hr * 0.11} ${hy + hr * 0.2} A ${hr * 0.31} ${hr * 0.23} 0 0 0 ${hx + hr * 0.73} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
-          <rect x={hx + hr * 0.34} y={hy + hr * 0.26} width={hr * 0.17} height={hr * 0.26} rx={1.6} fill="#FFFFFF" />
-          <rect x={hx + hr * 0.55} y={hy + hr * 0.24} width={hr * 0.17} height={hr * 0.26} rx={1.6} fill="#FFFFFF" />
-        </g>
-      )}
-      {muzzle === "snout" && (
-        <g>
-          <ellipse cx={hx + hr * 0.66} cy={hy + hr * 0.14} rx={hr * 0.28} ry={hr * 0.25} fill="#E88AA0" />
-          <circle cx={hx + hr * 0.58} cy={hy + hr * 0.14} r={hr * 0.065} fill={DARK} />
-          <circle cx={hx + hr * 0.76} cy={hy + hr * 0.14} r={hr * 0.065} fill={DARK} />
-        </g>
-      )}
-      {muzzle === "foxMuzzle" && (
-        <g>
-          {/* Острая мордочка: клин к носу + светлая щёчка */}
-          <path
-            d={`M ${hx + hr * 0.05} ${hy - hr * 0.3} Q ${hx + hr * 0.55} ${hy - hr * 0.18} ${hx + hr * 1.06} ${hy + hr * 0.1} Q ${hx + hr * 0.55} ${hy + hr * 0.42} ${hx + hr * 0.1} ${hy + hr * 0.34} Z`}
-            fill={body}
-          />
-          <path
-            d={`M ${hx + hr * 0.3} ${hy + hr * 0.08} Q ${hx + hr * 0.62} ${hy + hr * 0.12} ${hx + hr * 0.96} ${hy + hr * 0.14} Q ${hx + hr * 0.58} ${hy + hr * 0.34} ${hx + hr * 0.22} ${hy + hr * 0.3} Z`}
-            fill="#FFFFFF" opacity="0.85"
-          />
-          <circle cx={hx + hr} cy={hy + hr * 0.06} r={hr * 0.085} fill={DARK} />
-          <path d={`M ${hx + hr * 0.61} ${hy + hr * 0.16} A ${hr * 0.18} ${hr * 0.14} 0 0 0 ${hx + hr * 0.83} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
-        </g>
-      )}
-      {muzzle === "catMuzzle" && (
-        <g>
-          <ellipse cx={hx + hr * 0.42} cy={hy + hr * 0.24} rx={hr * 0.36} ry={hr * 0.28} fill={belly} />
-          <polygon points={`${hx + hr * 0.52},${hy + hr * 0.08} ${hx + hr * 0.66},${hy + hr * 0.08} ${hx + hr * 0.59},${hy + hr * 0.18}`} fill={DARK} />
-          <path d={`M ${hx + hr * 0.32} ${hy + hr * 0.22} A ${hr * 0.15} ${hr * 0.12} 0 0 0 ${hx + hr * 0.62} ${hy + hr * 0.22}`} stroke={ink} strokeWidth={1.7} strokeLinecap="round" fill="none" />
-          <path d={`M ${hx + hr * 0.56} ${hy + hr * 0.22} A ${hr * 0.15} ${hr * 0.12} 0 0 1 ${hx + hr * 0.86} ${hy + hr * 0.22}`} stroke={ink} strokeWidth={1.7} strokeLinecap="round" fill="none" />
-          {[-0.04, 0.08, 0.2].map((dy) => (
-            <line key={dy} x1={hx + hr * 0.55} y1={hy + hr * (0.12 + dy)} x2={hx + hr * 1.15} y2={hy + hr * dy * 1.5} stroke="#6E645A" strokeOpacity="0.75" strokeWidth={1.3} strokeLinecap="round" />
-          ))}
-        </g>
-      )}
-      {muzzle === "longMuzzle" && (
-        <g>
-          <rect x={hx + hr * 0.1} y={hy - hr * 0.16} width={hr * 1.14} height={hr * 0.52} rx={hr * 0.26} fill={body} />
-          <circle cx={hx + hr * 1.16} cy={hy} r={hr * 0.1} fill={DARK} />
-          <path d={`M ${hx + hr * 0.65} ${hy + hr * 0.14} A ${hr * 0.25} ${hr * 0.2} 0 0 0 ${hx + hr * 0.91} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
-        </g>
-      )}
-      {muzzle === "smile" && (
-        <g>
-          <circle cx={hx + hr * 0.55} cy={hy + hr * 0.06} r={hr * 0.1} fill={DARK} />
-          <path d={`M ${hx + hr * 0.17} ${hy + hr * 0.2} A ${hr * 0.28} ${hr * 0.2} 0 0 0 ${hx + hr * 0.73} ${hy + hr * 0.2}`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
-        </g>
-      )}
-      {/* Усики тюленя */}
-      {type === "seal" && (
-        <g stroke="#7A8896" strokeWidth={1.6} strokeLinecap="round">
-          <line x1={hx + hr * 0.4} y1={hy - hr * 0.04} x2={hx + hr * 1.05} y2={hy - hr * 0.1} />
-          <line x1={hx + hr * 0.4} y1={hy + hr * 0.1} x2={hx + hr * 1.05} y2={hy + hr * 0.04} />
-        </g>
-      )}
-    </g>
-  );
-}
-
-/** Шапки (гардероб). */
-function Hat({
-  hx, hy, hr, pet, s,
-}: { hx: number; hy: number; hr: number; pet: Pet; s: number }) {
-  const hat = pet.hat ?? "none";
-  if (hat === "cap") {
-    return (
-      <g>
-        <path
-          d={`M ${hx - hr * 1.05} ${hy - hr * 0.25} A ${hr * 1.05} ${hr * 1.05} 0 0 1 ${hx + hr * 1.05} ${hy - hr * 0.25} Z`}
-          fill="#EF476F"
-        />
-        <rect x={hx + hr * 0.5} y={hy - hr * 0.42} width={hr * 0.9} height={hr * 0.24} rx={hr * 0.12} fill="#D63A5C" />
-      </g>
-    );
-  }
-  if (hat === "beanie") {
-    return (
-      <g>
-        <path
-          d={`M ${hx - hr * 1.1} ${hy - hr * 0.3} A ${hr * 1.1} ${hr * 1.15} 0 0 1 ${hx + hr * 1.1} ${hy - hr * 0.3} Z`}
-          fill="#1CB0F6"
-        />
-        <rect x={hx - hr * 1.1} y={hy - hr * 0.5} width={hr * 2.2} height={hr * 0.34} rx={hr * 0.16} fill="#1899D6" />
-        <circle cx={hx} cy={hy - hr * 1.5} r={hr * 0.24} fill="#FFFFFF" />
-      </g>
-    );
-  }
-  if (hat === "crown") {
-    const baseY = hy - hr * 0.82;
-    return (
-      <g>
-        <polygon
-          points={`${hx - hr * 0.7},${baseY} ${hx - hr * 0.7},${baseY - hr * 0.5} ${hx - hr * 0.35},${baseY - hr * 0.2} ${hx},${baseY - hr * 0.62} ${hx + hr * 0.35},${baseY - hr * 0.2} ${hx + hr * 0.7},${baseY - hr * 0.5} ${hx + hr * 0.7},${baseY}`}
-          fill="#FFC800"
-        />
-        <circle cx={hx} cy={baseY - hr * 0.16} r={hr * 0.1} fill="#EF476F" />
-      </g>
-    );
-  }
-  return null;
-}
-
-/** Шея: шарф/бантик (гардероб). */
-function Neckwear({
-  nx, ny, hr, pet,
-}: { nx: number; ny: number; hr: number; pet: Pet }) {
-  const neck = pet.neck ?? "none";
-  if (neck === "scarf") {
-    return (
-      <g>
-        <rect x={nx - hr} y={ny - hr * 0.25} width={hr * 2} height={hr * 0.5} rx={hr * 0.2} fill="#EF476F" />
-        <rect x={nx - hr * 0.75} y={ny} width={hr * 0.5} height={hr * 0.95} rx={hr * 0.16} fill="#EF476F" />
-        <line x1={nx - hr * 0.68} y1={ny + hr * 0.3} x2={nx - hr * 0.35} y2={ny + hr * 0.38} stroke="#FFFFFF" strokeWidth={2.2} strokeLinecap="round" />
-        <line x1={nx - hr * 0.68} y1={ny + hr * 0.6} x2={nx - hr * 0.35} y2={ny + hr * 0.68} stroke="#FFFFFF" strokeWidth={2.2} strokeLinecap="round" />
-      </g>
-    );
-  }
-  if (neck === "bow") {
-    return (
-      <g fill="#FF6B6B">
-        <polygon points={`${nx},${ny} ${nx - hr * 0.65},${ny - hr * 0.34} ${nx - hr * 0.65},${ny + hr * 0.34}`} />
-        <polygon points={`${nx},${ny} ${nx + hr * 0.65},${ny - hr * 0.34} ${nx + hr * 0.65},${ny + hr * 0.34}`} />
-        <circle cx={nx} cy={ny} r={hr * 0.16} fill="#E14C4C" />
-      </g>
-    );
-  }
-  return null;
-}
-
-/** Очки/тёмные очки (гардероб). */
-function Glasses({
-  hx, hy, hr, pet, hidden,
-}: { hx: number; hy: number; hr: number; pet: Pet; hidden: boolean }) {
-  if (hidden) return null;
-  const face = pet.face ?? "none";
-  const eyeDX = hr * 0.38;
-  const eyeY = hy - hr * 0.06;
-  if (face === "glasses") {
-    return (
-      <g stroke="#3A3A3A" strokeWidth={2.4} fill="none">
-        <circle cx={hx - eyeDX} cy={eyeY} r={hr * 0.44} />
-        <circle cx={hx + eyeDX} cy={eyeY} r={hr * 0.44} />
-        <line x1={hx - eyeDX + hr * 0.44} y1={eyeY} x2={hx + eyeDX - hr * 0.44} y2={eyeY} />
-      </g>
-    );
-  }
-  if (face === "shades") {
-    return (
-      <g>
-        <rect x={hx - eyeDX - hr * 0.42} y={eyeY - hr * 0.3} width={hr * 0.85} height={hr * 0.6} rx={hr * 0.14} fill="#2E3A55" />
-        <rect x={hx + eyeDX - hr * 0.42} y={eyeY - hr * 0.3} width={hr * 0.85} height={hr * 0.6} rx={hr * 0.14} fill="#2E3A55" />
-        <line x1={hx - eyeDX + hr * 0.42} y1={eyeY - hr * 0.1} x2={hx + eyeDX - hr * 0.42} y2={eyeY - hr * 0.1} stroke="#2E3A55" strokeWidth={2.6} />
-      </g>
-    );
-  }
-  return null;
-}
-
-/** Зверь/птица/прыгун/водный житель — диспетчер по телосложению. */
-function Animal(props: AnimalProps & { bhv: PetBehavior | null }) {
-  const st = speciesStyle(props.type);
-  const body = skinnedBodyColor(props.type, props.pet.skin);
-  const belly = skinnedBellyColor(props.type, props.pet.skin);
-  const shade = skinnedShadeColor(props.type, props.pet.skin);
-  const full = { ...props, st, body, belly, shade };
-  switch (st.build ?? "quad") {
-    case "bird":
-      return <Bird {...full} />;
-    case "hop":
-      return <Hopper {...full} />;
-    case "pond":
-      return <PondCreature {...full} />;
-    default:
-      return <Quadruped {...full} />;
-  }
-}
-
-/** Силуэт настоящего четвероногого: грудь, холка, круп, поджарый живот. */
-function quadBodyPath(bw: number, bh: number): string {
-  const bx = (f: number) => (f * bw).toFixed(2);
-  const by = (f: number) => (f * bh).toFixed(2);
-  return [
-    `M ${bx(0.46)} ${by(0)}`,
-    `C ${bx(0.5)} ${by(-0.22)} ${bx(0.42)} ${by(-0.4)} ${bx(0.18)} ${by(-0.48)}`,
-    `C ${bx(0.06)} ${by(-0.52)} ${bx(-0.04)} ${by(-0.44)} ${bx(-0.14)} ${by(-0.47)}`,
-    `C ${bx(-0.26)} ${by(-0.52)} ${bx(-0.4)} ${by(-0.5)} ${bx(-0.47)} ${by(-0.3)}`,
-    `C ${bx(-0.52)} ${by(-0.12)} ${bx(-0.5)} ${by(0.12)} ${bx(-0.42)} ${by(0.28)}`,
-    `C ${bx(-0.32)} ${by(0.44)} ${bx(-0.08)} ${by(0.47)} ${bx(0.12)} ${by(0.42)}`,
-    `C ${bx(0.3)} ${by(0.38)} ${bx(0.42)} ${by(0.22)} ${bx(0.46)} ${by(0)}`,
-    "Z",
-  ].join(" ");
-}
-
-interface HeadGroupProps {
-  pivotX: number; pivotY: number;
-  neckAngle: number; reach: number; headTilt: number;
-  hr: number; bh: number;
-  st: SpeciesStyle; pet: Pet;
-  body: string; belly: string; s: number; sleeping: boolean;
-}
-
-/** Шея и голова: угол шеи, вытянутость и наклон морды независимы —
- *  поэтому зверь умеет и бежать, и принюхиваться, и щипать траву. */
-function HeadGroupV2({
-  pivotX, pivotY, neckAngle, reach, headTilt, hr, bh, st, pet, body, belly, s, sleeping,
-}: HeadGroupProps) {
-  const dx = Math.sin(neckAngle);
-  const dy = -Math.cos(neckAngle);
-  const hx = pivotX + dx * reach;
-  const hy = pivotY + dy * reach;
-  const rot = ((neckAngle * 0.5 + headTilt) * 180) / Math.PI;
-  const midX = pivotX + dx * reach * 0.52 + bh * 0.12;
-  const midY = pivotY + dy * reach * 0.52;
-  return (
-    <g>
-      {reach > hr * 0.2 && (
-        <path
-          d={`M ${pivotX - bh * 0.1} ${pivotY + bh * 0.04} Q ${midX} ${midY} ${hx - hr * 0.15} ${hy + hr * 0.05}`}
-          stroke={body} strokeWidth={bh * 0.3} strokeLinecap="round" fill="none"
-        />
-      )}
-      <g transform={`translate(${hx} ${hy}) rotate(${rot})`}>
-        <circle r={hr} fill={body} />
-        <Ears hx={0} hy={0} hr={hr} st={st} body={body} belly={belly} s={s} />
-        <HeadDetails hx={0} hy={0} hr={hr} st={st} s={s} />
-        <Face hx={0} hy={0} hr={hr} st={st} type={pet.type} belly={belly} s={s} sleeping={sleeping} body={body} />
-        <Hat hx={0} hy={0} hr={hr} pet={pet} s={s} />
-        <Glasses hx={0} hy={0} hr={hr} pet={pet} hidden={sleeping} />
-      </g>
-      {(pet.neck === "scarf" || pet.neck === "bow") && (
-        <Neckwear nx={pivotX + dx * reach * 0.22} ny={pivotY + dy * reach * 0.22 + bh * 0.1} hr={hr} pet={pet} />
-      )}
-    </g>
-  );
-}
-
-/** Четвероногий ходок: настоящее тело, шея, голова, повадки (v2.0.0). */
-function Quadruped({ s, type, st, body, belly, shade, sleeping, pet, bhv }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string; bhv: PetBehavior | null }) {
-  const bw = 78 * s * (st.bodyLen ?? 1);
-  const bh = 46 * s;
-  const legH = 26 * s * (st.legLen ?? 1);
-  const hr = 15.5 * s * (st.headScale ?? 1);
-  const kind = sleeping ? "sleep" : (bhv?.kind ?? "walk");
-  const ease = sleeping ? 0 : (bhv?.poseEase ?? 0);
-  const legW = 9.5 * s;
-
-  const headGroup = (p: { pivotX: number; pivotY: number; neckAngle: number; reach: number; headTilt: number; eyesClosed: boolean }) => (
-    <HeadGroupV2
-      pivotX={p.pivotX} pivotY={p.pivotY}
-      neckAngle={p.neckAngle} reach={p.reach} headTilt={p.headTilt}
-      hr={hr} bh={bh} st={st} pet={pet} body={body} belly={belly} s={s} sleeping={p.eyesClosed}
-    />
-  );
-
-  if (kind === "sleep") {
-    // Лёжа: распластанное тело, морда на земле, глаза закрыты.
-    const bodyCy = -bh * 0.34;
-    return (
-      <g>
-        <TailV2 ax={-bw * 0.46} ay={bodyCy} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag={false} s={s} />
-        <path d={quadBodyPath(bw, bh * 0.76)} transform={`translate(0 ${bodyCy})`} fill={body} />
-        <ellipse cx={-bw * 0.02} cy={bodyCy + bh * 0.12} rx={bw * 0.275} ry={bh * 0.15} fill={belly} />
-        <BackDetails bodyCy={bodyCy} bw={bw} bh={bh} st={st} body={body} s={s} stage={3} />
-        {headGroup({ pivotX: bw * 0.32, pivotY: bodyCy - bh * 0.14, neckAngle: 0.62, reach: bh * 0.54, headTilt: 0.58, eyesClosed: true })}
-      </g>
-    );
-  }
-
-  if (kind === "sit") {
-    // Сидит: круп на земле, грудь вверх, передние лапы прямые.
-    const haunchX = -bw * 0.14;
-    const haunchY = -bh * 0.4;
-    const tilt = -0.66;
-    const ct = Math.cos(tilt), stl = Math.sin(tilt);
-    const chestX = haunchX + bw * 0.42 * ct - -bh * 0.04 * stl;
-    const chestY = haunchY + bw * 0.42 * stl + -bh * 0.04 * ct;
-    return (
-      <g>
-        <TailV2 ax={-bw * 0.36} ay={-bh * 0.16} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag={false} wrap s={s} />
-        <ellipse cx={haunchX} cy={haunchY} rx={bw * 0.27} ry={bh * 0.46} fill={body} />
-        <ellipse cx={haunchX + bw * 0.12} cy={haunchY + bh * 0.2} rx={bw * 0.15} ry={bh * 0.17} fill={belly} />
-        <ellipse cx={-bw * 0.04} cy={-4 * s} rx={bw * 0.13} ry={4.25 * s} fill={shade} />
-        <g transform={`translate(${haunchX} ${haunchY}) rotate(${(tilt * 180) / Math.PI})`}>
-          <ellipse cx={bw * 0.2} cy={-bh * 0.02} rx={bw * 0.29} ry={bh * 0.39} fill={body} />
-          <ellipse cx={bw * 0.16} cy={bh * 0.14} rx={bw * 0.17} ry={bh * 0.14} fill={belly} />
-        </g>
-        <BackDetails bodyCy={haunchY - bh * 0.34} bw={bw * 0.6} bh={bh * 0.8} st={st} body={body} s={s} stage={Math.round((s - 0.55) / 0.22)} />
-        {/* Плечевой круг — прячет верх лап в груди */}
-        <circle cx={chestX} cy={chestY + bh * 0.04} r={bh * 0.16} fill={body} />
-        {[-5.5 * s, 5.5 * s].map((dx, i) => (
-          <g key={dx}>
-            <rect x={chestX + dx - 4.8 * s} y={chestY + bh * 0.02} width={9.6 * s} height={Math.max(4, -(chestY + bh * 0.02) - 1)} rx={4.8 * s} fill={i === 0 ? shade : body} />
-            <ellipse cx={chestX + dx + 3.2 * s} cy={-2.6 * s} rx={6.5 * s} ry={3.25 * s} fill={i === 0 ? shade : body} />
-          </g>
-        ))}
-        {headGroup({ pivotX: chestX + bw * 0.03, pivotY: chestY - bh * 0.24, neckAngle: 0.42, reach: bh * 0.55, headTilt: 0.06, eyesClosed: false })}
-      </g>
-    );
-  }
-
-  // Походка / принюхивание / пастьба.
-  const stride = bhv?.stride ?? 0;
-  const bob = Math.sin(stride * 2) * 1.7 * s * (bhv ? 1 - bhv.poseEase * 0.8 : 1);
-  const bodyCy = -legH - bh * 0.5 + bob;
-  const amp = 0.4;
-  const walkNeck = 0.1 + Math.sin(stride * 2) * 0.03;
-  let neckAngle = walkNeck;
-  let reachM = 1;
-  let headTilt = 0.03 + Math.sin(stride * 2 + 1) * 0.02;
-  if (ease > 0) {
-    let tAng = 0.9, tReach = 0.95, tTilt = 0.35;
-    if (kind === "graze") {
-      tAng = 1.95;
-      tReach = 1.06;
-      tTilt = 0.6 + Math.sin(Date.now() / 1000 * 9) * 0.05;
-    } else if (kind === "sniff") {
-      tAng = 0.92 + Math.sin(Date.now() / 1000 * 7) * 0.05;
-      tReach = 0.96;
-      tTilt = 0.36;
-    } else if (kind === "look") {
-      tAng = -0.1 + Math.sin(Date.now() / 1000 * 1.5) * 0.07;
-      tReach = 1;
-      tTilt = -0.04;
-    }
-    neckAngle = walkNeck + (tAng - walkNeck) * ease;
-    reachM = 1 + (tReach - 1) * ease;
-    headTilt = headTilt + (tTilt - headTilt) * ease;
-  }
-  const neckLen = bh * (0.22 + (st.neck ?? 0.3) * 0.55);
-  const pivotX = bw * 0.3;
-  const pivotY = bodyCy - bh * 0.06;
-
-  return (
-    <g>
-      {/* Лапы: диагональная походка (дальняя пара темнее) */}
-      <LegV2 hx={bw * 0.3} hy={bodyCy + bh * 0.42} len={legH} w={legW} color={shade} swing={Math.sin(stride + Math.PI) * amp} />
-      <LegV2 hx={-bw * 0.28} hy={bodyCy + bh * 0.4} len={legH} w={legW * 1.21} color={shade} swing={Math.sin(stride + Math.PI) * amp} rear />
-      <LegV2 hx={bw * 0.3} hy={bodyCy + bh * 0.42} len={legH} w={legW} color={body} swing={Math.sin(stride) * amp} />
-      <LegV2 hx={-bw * 0.28} hy={bodyCy + bh * 0.4} len={legH} w={legW * 1.21} color={body} swing={Math.sin(stride) * amp} rear />
-      {/* Хвост виляет на ходу */}
-      <TailV2 ax={-bw * 0.44} ay={bodyCy - bh * 0.06} bw={bw} bh={bh} kind={st.tail ?? "none"} body={body} wag s={s} />
-      {/* Тело настоящего зверя */}
-      <path d={quadBodyPath(bw, bh)} transform={`translate(0 ${bodyCy})`} fill={body} />
-      {/* Бедро — объём задней половины */}
-      <ellipse cx={-bw * 0.27} cy={bodyCy + bh * 0.02} rx={bw * 0.2} ry={bh * 0.4} fill={shade} opacity={0.55} />
-      {/* Животик */}
-      <ellipse cx={bw * 0.04} cy={bodyCy + bh * 0.3} rx={bw * 0.31} ry={bh * 0.17} fill={belly} />
-      <BackDetails bodyCy={bodyCy} bw={bw} bh={bh} st={st} body={body} s={s} stage={Math.round((s - 0.55) / 0.22)} />
-      {/* Грива единорога вдоль шеи */}
-      {st.extra === "mane" && (
-        <Mane bodyCy={pivotY} headX={pivotX + Math.sin(neckAngle) * neckLen * reachM} headY={pivotY - Math.cos(neckAngle) * neckLen * reachM} s={s} />
-      )}
-      {headGroup({
-        pivotX, pivotY,
-        neckAngle, reach: neckLen * reachM, headTilt,
-        eyesClosed: false,
-      })}
-    </g>
-  );
-}
-
-/** Птица: две лапки с коленчиком, грушевидное тело, клюв (v2.0.0). */
-function Bird({ s, type, st, body, belly, shade, sleeping, pet, bhv }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string; bhv: PetBehavior | null }) {
-  const bw = 40 * s;
-  const bh = 56 * s * (st.bodyLen ?? 1);
-  const legH = 16 * s;
-  const hr = 14.5 * s * (st.headScale ?? 1);
-  const kind = sleeping ? "sleep" : (bhv?.kind ?? "walk");
-  const stride = bhv?.stride ?? 0;
-  const sit = kind === "sleep" ? legH * 0.35 : legH;
-  const bodyCy = -sit - bh * 0.44;
-
-  const walkTilt = kind === "walk" ? Math.sin(stride) * 3 : 0;
-
-  // Голова с наклоном: на паузе птица клюёт зёрнышки.
-  const pitch = bhv?.headPitch ?? 0;
-  const pivotX = bw * 0.1;
-  const pivotY = bodyCy - bh * 0.44;
-  const neckLen = bh * 0.26;
-  const headX = pivotX + Math.sin(pitch * 1.35) * neckLen;
-  const headY = pivotY - Math.cos(pitch * 1.35) * neckLen;
-  const headRot = (pitch * 0.9 * 180) / Math.PI;
-
-  return (
-    <g>
-      <g transform={walkTilt ? `rotate(${walkTilt} 0 0)` : undefined}>
-        {/* Лапки с коленчиком */}
-        {[-1, 1].map((d) => {
-          const swing = kind === "sleep" ? 0 : Math.sin(stride + (d > 0 ? 0 : Math.PI)) * 0.32;
-          return (
-            <g key={d} transform={`translate(${d * bw * 0.14} ${-sit}) rotate(${(swing * 180) / Math.PI})`}>
-              <line x1={0} y1={0} x2={0} y2={sit * 0.62} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
-              <line x1={0} y1={sit * 0.62} x2={2 * s} y2={sit} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
-              <line x1={2 * s} y1={sit} x2={6.5 * s} y2={sit + 0.5} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
-              <line x1={2 * s} y1={sit} x2={-1.5 * s} y2={sit + 0.5} stroke={kind === "sleep" ? shade : "#E8A13D"} strokeWidth={4.2 * s} strokeLinecap="round" />
-            </g>
-          );
-        })}
-        {/* Хвост-веер из перьев */}
-        <polygon
-          points={`${-bw * 0.26},${bodyCy + bh * 0.22} ${-bw * 0.86},${bodyCy + bh * 0.3} ${-bw * 0.8},${bodyCy + bh * 0.42} ${-bw * 0.7},${bodyCy + bh * 0.36} ${-bw * 0.66},${bodyCy + bh * 0.5} ${-bw * 0.28},${bodyCy + bh * 0.44}`}
-          fill={shade}
-        />
-        {/* Тело-груша */}
-        <path
-          d={`M ${bw * 0.4} ${bodyCy - bh * 0.1} C ${bw * 0.44} ${bodyCy - bh * 0.4} ${bw * 0.1} ${bodyCy - bh * 0.52} ${-bw * 0.1} ${bodyCy - bh * 0.44} C ${-bw * 0.4} ${bodyCy - bh * 0.3} ${-bw * 0.44} ${bodyCy + bh * 0.16} ${-bw * 0.26} ${bodyCy + bh * 0.36} C ${-bw * 0.1} ${bodyCy + bh * 0.52} ${bw * 0.2} ${bodyCy + bh * 0.48} ${bw * 0.34} ${bodyCy + bh * 0.24} Z`}
-          fill={body}
-        />
-        <ellipse cx={bw * 0.1} cy={bodyCy + bh * 0.14} rx={bw * 0.27} ry={bh * 0.22} fill={belly} />
-        {/* Крылышко с пёрышками */}
-        <ellipse cx={-bw * 0.14} cy={bodyCy - bh * 0.02} rx={bw * 0.23} ry={bh * 0.21} fill={shade} />
-        <line x1={-bw * 0.1} y1={bodyCy + bh * 0.02} x2={-bw * 0.3} y2={bodyCy + bh * 0.16} stroke={shade} strokeWidth={1.6} strokeLinecap="round" />
-        <line x1={-bw * 0.08} y1={bodyCy + bh * 0.12} x2={-bw * 0.26} y2={bodyCy + bh * 0.26} stroke={shade} strokeWidth={1.6} strokeLinecap="round" />
-      </g>
-      {/* Голова */}
-      <g transform={`translate(${headX} ${headY}) rotate(${headRot})`}>
-        <circle r={hr} fill={body} />
-        <Ears hx={0} hy={0} hr={hr} st={st} body={body} belly={belly} s={s} />
-        <HeadDetails hx={0} hy={0} hr={hr} st={st} s={s} />
-        <Face hx={0} hy={0} hr={hr} st={st} type={type} belly={belly} s={s} sleeping={kind === "sleep"} body={body} />
-        <Hat hx={0} hy={0} hr={hr} pet={pet} s={s} />
-        <Glasses hx={0} hy={0} hr={hr} pet={pet} hidden={kind === "sleep"} />
-      </g>
-      {(pet.neck === "scarf" || pet.neck === "bow") && (
-        <Neckwear nx={bw * 0.06} ny={bodyCy - bh * 0.4} hr={hr} pet={pet} />
-      )}
-    </g>
-  );
-}
-
-/** Прыгуны: настоящий зайчик и лягушонок (v2.0.0). */
-function Hopper({ s, type, st, body, belly, shade, sleeping, pet, bhv }: AnimalProps & { st: SpeciesStyle; body: string; belly: string; shade: string; bhv: PetBehavior | null }) {
-  const bw = 58 * s * (st.bodyLen ?? 1);
-  const bh = 46 * s;
-  const bodyCy = -bh * 0.48 - 4 * s;
-  const isFrog = (st.muzzle ?? "smile") === "topEyes";
-
-  if (isFrog) {
-    // Лягушонок: глаза-фонарики на макушке.
-    return (
-      <g>
-        {!sleeping && (
-          <animateTransform
-            attributeName="transform" type="translate"
-            values="0 0;0 -24;0 0;0 0"
-            keyTimes="0;0.2;0.4;1"
-            calcMode="spline"
-            keySplines="0.3 0 0.4 1;0.6 0 0.8 0.6;0 0 1 1"
-            dur="2.4s"
-            repeatCount="indefinite"
-          />
-        )}
-        <ellipse cx={-bw * 0.24} cy={-6 * s} rx={bw * 0.17} ry={bh * 0.12} fill={shade} />
-        <ellipse cx={-bw * 0.3} cy={-bh * 0.2} rx={bw * 0.21} ry={bh * 0.15} fill={shade} />
-        <ellipse cx={bw * 0.34} cy={-3 * s} rx={bw * 0.08} ry={bh * 0.07} fill={body} />
-        <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
-        <ellipse cx={bw * 0.06} cy={bodyCy + bh * 0.18} rx={bw * 0.26} ry={bh * 0.22} fill={belly} />
-        {[-0.22, 0.22].map((sx) => (
-          <g key={sx}>
-            <circle cx={bw * sx} cy={bodyCy - bh * 0.5} r={bh * 0.42 * 0.42} fill={body} />
-            {sleeping ? (
-              <line
-                x1={bw * sx - bh * 0.08} y1={bodyCy - bh * 0.51}
-                x2={bw * sx + bh * 0.08} y2={bodyCy - bh * 0.51}
-                stroke="#33261A" strokeWidth={2} strokeLinecap="round"
-              />
-            ) : (
-              <g className="ttg-blink">
-                <circle cx={bw * sx} cy={bodyCy - bh * 0.5 - 2 * s} r={bh * 0.42 * 0.3} fill="#FFFFFF" />
-                <circle cx={bw * sx} cy={bodyCy - bh * 0.5 - 1 * s} r={bh * 0.42 * 0.14} fill="#33261A" />
-              </g>
-            )}
-          </g>
-        ))}
-        <path
-          d={`M ${-bw * 0.24} ${bodyCy + bh * 0.08} A ${bw * 0.26} ${bh * 0.18} 0 0 0 ${bw * 0.28} ${bodyCy + bh * 0.08}`}
-          stroke="#4A3B2A" strokeWidth={2.4} strokeLinecap="round" fill="none"
-        />
-        <Hat hx={0} hy={bodyCy - bh * 0.86} hr={bh * 0.42} pet={pet} s={s} />
-        <Glasses hx={0} hy={bodyCy} hr={bh * 0.42} pet={pet} hidden={sleeping} />
-      </g>
-    );
-  }
-
-  // Настоящий зайчик: на паузе опускает голову к траве.
-  const ease = sleeping ? 0 : (bhv?.poseEase ?? 0);
-  const kind = bhv?.kind ?? "walk";
-  const drop = kind === "graze" || kind === "sniff" ? ease * bh * 0.22 : 0;
-  const hr = bh * 0.34;
-  const headX = bw * 0.4;
-  const headY = bodyCy - bh * 0.4 + drop;
-
-  return (
-    <g>
-      {!sleeping && (
-        <animateTransform
-          attributeName="transform" type="translate"
-          values="0 0;0 -26;0 0;0 0"
-          keyTimes="0;0.19;0.38;1"
-          calcMode="spline"
-          keySplines="0.3 0 0.4 1;0.6 0 0.8 0.6;0 0 1 1"
-          dur="2.35s"
-          repeatCount="indefinite"
-        />
-      )}
-      {/* Пушистый хвостик */}
-      <circle cx={-bw * 0.4} cy={bodyCy + bh * 0.1} r={7 * s} fill="#FFFFFF" opacity="0.9" />
-      {/* Заднее бедро и ступня */}
-      <ellipse cx={-bw * 0.14} cy={bodyCy + bh * 0.16} rx={bw * 0.18} ry={bh * 0.22} fill={shade} />
-      <ellipse cx={bw * 0.02} cy={-6 * s} rx={bw * 0.17} ry={4.25 * s} fill={shade} />
-      {/* Передние лапки */}
-      <ellipse cx={bw * 0.3} cy={-5 * s} rx={bw * 0.075} ry={3.75 * s} fill={body} />
-      {/* Тело-капля: круп выше, грудь вперёд */}
-      <path
-        d={`M ${bw * 0.42} ${bodyCy - bh * 0.02} C ${bw * 0.46} ${bodyCy - bh * 0.34} ${bw * 0.16} ${bodyCy - bh * 0.55} ${-bw * 0.08} ${bodyCy - bh * 0.5} C ${-bw * 0.36} ${bodyCy - bh * 0.44} ${-bw * 0.48} ${bodyCy - bh * 0.1} ${-bw * 0.44} ${bodyCy + bh * 0.14} C ${-bw * 0.38} ${bodyCy + bh * 0.4} ${bw * 0.1} ${bodyCy + bh * 0.46} ${bw * 0.28} ${bodyCy + bh * 0.24} Z`}
-        fill={body}
-      />
-      <ellipse cx={bw * 0.02} cy={bodyCy + bh * 0.2} rx={bw * 0.25} ry={bh * 0.15} fill={belly} />
-      {/* Голова */}
-      <circle cx={headX} cy={headY} r={hr} fill={body} />
-      <Ears hx={headX} hy={headY} hr={hr} st={st} body={body} belly={belly} s={s} />
-      <HeadDetails hx={headX} hy={headY} hr={hr} st={st} s={s} />
-      <Face hx={headX} hy={headY} hr={hr} st={st} type={type} belly={belly} s={s} sleeping={sleeping} body={body} />
-      <Hat hx={headX} hy={headY} hr={hr} pet={pet} s={s} />
-      <Glasses hx={headX} hy={headY} hr={hr} pet={pet} hidden={sleeping} />
-      {(pet.neck === "scarf" || pet.neck === "bow") && (
-        <Neckwear nx={headX - bh * 0.26} ny={headY + bh * 0.34} hr={hr} pet={pet} />
-      )}
-    </g>
-  );
-}
-
-/** Водные жители пруда (кит, тюлень, черепашка, осьминожка, крабик). */
-function PondCreature({ s, type, st, body, belly, sleeping, pet }: AnimalProps & { st: SpeciesStyle; body: string; belly: string }) {
-  const bw = 64 * s;
-  const bh = 44 * s;
-  const bodyCy = -bh / 2;
-  const extra = st.extra ?? "none";
-  const eyesClosed = sleeping;
-
-  return (
-    <g>
-      {/* Хвост-плавник кита */}
-      {type === "whale" && (
-        <polygon
-          points={`${-bw * 0.46},${bodyCy} ${-bw * 0.75},${bodyCy - bh * 0.3} ${-bw * 0.6},${bodyCy} ${-bw * 0.75},${bodyCy + bh * 0.3}`}
-          fill={body}
-        />
-      )}
-      <ellipse cx={0} cy={bodyCy} rx={bw / 2} ry={bh / 2} fill={body} />
-      <ellipse cx={0} cy={bodyCy + bh * 0.18} rx={bw * 0.31} ry={bh * 0.25} fill={belly} />
-      {/* Панцирь черепашки */}
-      {extra === "shell" && (
-        <g>
-          <ellipse cx={0} cy={bodyCy - bh * 0.08} rx={bw * 0.47} ry={bh * 0.39} fill="#6B9B4E" />
-          <ellipse cx={0} cy={bodyCy - bh * 0.08} rx={bw * 0.275} ry={bh * 0.22} fill="#8FBF6A" />
-        </g>
-      )}
-      {/* Ножки осьминожки */}
-      {extra === "tentacles" &&
-        [-2, -1, 0, 1, 2].map((i) => (
-          <circle key={i} cx={bw * 0.17 * i} cy={bodyCy + bh * 0.52} r={5.2 * s} fill={body} />
-        ))}
-      {/* Клешни крабика */}
-      {extra === "claws" &&
-        [-0.62, 0.62].map((sx) => (
-          <g key={sx}>
-            <circle cx={sx * bw} cy={bodyCy - bh * 0.1} r={8.5 * s} fill={body} />
-            <path
-              d={`M ${sx * bw - 8.5 * s} ${bodyCy - bh * 0.1} A ${8.5 * s} ${8.5 * s} 0 0 1 ${sx * bw + 8.5 * s} ${bodyCy - bh * 0.1} Z`}
-              fill={belly}
-              opacity={sx > 0 ? 1 : 0}
-            />
-          </g>
-        ))}
-      {/* Фонтанчик кита */}
-      {type === "whale" && (
-        <g stroke="#9FD4EF" strokeWidth={2.4} strokeLinecap="round">
-          <line x1={0} y1={bodyCy - bh * 0.62} x2={0} y2={bodyCy - bh * 0.62 - 9} />
-          <line x1={0} y1={bodyCy - bh * 0.62} x2={-5} y2={bodyCy - bh * 0.62 - 8} />
-          <line x1={0} y1={bodyCy - bh * 0.62} x2={5} y2={bodyCy - bh * 0.62 - 8} />
-        </g>
-      )}
-      {/* Глаза и улыбка */}
-      {eyesClosed ? (
-        <g stroke="#4A3B2A" strokeWidth={2.4} strokeLinecap="round">
-          <line x1={-bw * 0.17} y1={bodyCy - bh * 0.05} x2={-bw * 0.17 + 7 * s} y2={bodyCy - bh * 0.05} />
-          <line x1={bw * 0.17 - 7 * s} y1={bodyCy - bh * 0.05} x2={bw * 0.17} y2={bodyCy - bh * 0.05} />
-        </g>
-      ) : (
-        <g className="ttg-blink">
-          {[-1, 1].map((d) => (
-            <g key={d}>
-              <circle cx={d * bw * 0.17} cy={bodyCy - bh * 0.05} r={6.5 * s} fill="#FFFFFF" />
-              <circle cx={d * bw * 0.17 + 1.5} cy={bodyCy - bh * 0.05 + 1} r={3.2 * s} fill="#33261A" />
-            </g>
-          ))}
-        </g>
-      )}
-      {type === "whale" ? (
-        <path
-          d={`M ${-bw * 0.25} ${bodyCy + bh * 0.05} A ${bw * 0.25} ${bh * 0.25} 0 0 0 ${bw * 0.25} ${bodyCy + bh * 0.05}`}
-          stroke="#3E6E8E" strokeWidth={3} strokeLinecap="round" fill="none"
-        />
-      ) : (
-        <path
-          d={`M ${-7 * s} ${bodyCy + bh * 0.08} A ${7 * s} ${5 * s} 0 0 0 ${7 * s} ${bodyCy + bh * 0.08}`}
-          stroke="#4A3B2A" strokeWidth={2.2} strokeLinecap="round" fill="none"
-        />
-      )}
-      <Hat hx={0} hy={bodyCy - bh * 0.62} hr={bw * 0.3} pet={pet} s={s} />
-      <Glasses hx={0} hy={bodyCy - bh * 0.05} hr={bw * 0.42} pet={pet} hidden={eyesClosed} />
-    </g>
-  );
-}
-
-/** Грядка с семечком (растения, стадия 0) — растения растут, а не вылупляются. */
-function SeedBed({ s, progress }: { s: number; progress: number }) {
-  return (
-    <g>
-      {/* Холмик земли */}
       <ellipse cx={0} cy={-6 * s} rx={26 * s} ry={9 * s} fill={SOIL} />
       <ellipse cx={0} cy={-9 * s} rx={22 * s} ry={6 * s} fill="#96683F" />
-      {/* Семечко */}
       <g transform={`translate(2 ${-12 * s}) rotate(-35)`} className="ttg-egg" style={{ ["--wobble" as string]: "1deg" }}>
         <ellipse cx={0} cy={0} rx={4.5 * s} ry={6.5 * s} fill="#C89B62" />
         <ellipse cx={-1.6 * s} cy={-2.4 * s} rx={1.7 * s} ry={2.5 * s} fill="#E5C793" />
       </g>
-      {/* Трещинка */}
       {progress > 0.4 && (
         <path
           d={`M ${-14 * s} ${-4 * s} L ${-8 * s} ${-8 * s} L ${-11 * s} ${-13 * s}`}
           stroke="#5E3D22" strokeWidth={2} strokeLinecap="round" fill="none"
         />
       )}
-      {/* Проклюнувшийся росточек */}
       {progress > 0.62 && (
         <g>
           {(() => {
@@ -1370,7 +139,6 @@ function SeedBed({ s, progress }: { s: number; progress: number }) {
           })()}
         </g>
       )}
-      {/* Блеск */}
       {progress > 0.85 && (
         <g>
           <circle cx={-16 * s} cy={-26 * s} r={2.2 * s} fill="#FFD166" />
@@ -1381,74 +149,508 @@ function SeedBed({ s, progress }: { s: number; progress: number }) {
   );
 }
 
-function PetFigure({
+// ── Повадки настоящих зверей — порт _petBehavior из Dart ──────────────
+const STROLL_PERIOD = 21; // цикл «прогулка + пауза», с
+const PAUSE_AT = 13.5; // начало паузы внутри цикла
+const PAUSE_LEN = 3.8; // длительность паузы, с
+const CROSS_SEC = 8.2; // полпути через лужайку, с
+
+interface PetBehavior {
+  x: number;
+  facing: number;
+  kind: "walk" | "sniff" | "graze" | "sit" | "peck" | "look";
+  headPitch: number;
+  stride: number;
+  poseEase: number;
+}
+
+const GRAZERS: PetType[] = ["deer", "unicorn", "bunny", "squirrel", "pig", "koala", "panda", "dragon", "hedgehog"];
+const PERCHERS: PetType[] = ["fox", "cat", "dog", "raccoon", "bear"];
+const PECKERS: PetType[] = ["owl", "duck", "chick", "penguin"];
+
+function strHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+function pbHash(a: number, b: number): number {
+  let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263)) & 0x7fffffff;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) & 0x7fffffff;
+  return ((h ^ (h >>> 16)) & 0x7fffffff) / 0x7fffffff;
+}
+
+function petBehavior(pet: Pet, tSec: number): PetBehavior {
+  const seed = strHash(pet.id) & 0x7fffffff;
+  const off = (seed % 1900) / 100;
+  const total = tSec + off;
+  const local = total % STROLL_PERIOD;
+  const cycle = Math.floor(total / STROLL_PERIOD);
+
+  const pauseDone =
+    Math.floor(total / STROLL_PERIOD) * PAUSE_LEN +
+    (local >= PAUSE_AT ? Math.min(local - PAUSE_AT, PAUSE_LEN) : 0);
+  const walkT = tSec - pauseDone;
+
+  const tri = ((walkT + off) / CROSS_SEC) % 2;
+  const x = tri < 1 ? tri : 2 - tri;
+  const facing = tri < 1 ? 1 : -1;
+  const stride = ((walkT + off) * 2 * Math.PI) / 0.8;
+
+  if (local < PAUSE_AT || local >= PAUSE_AT + PAUSE_LEN) {
+    return { x, facing, kind: "walk", headPitch: 0.05 + Math.sin(stride * 2) * 0.03, stride, poseEase: 0 };
+  }
+
+  const r = pbHash(seed, cycle);
+  let kind: PetBehavior["kind"];
+  if (PECKERS.includes(pet.type)) {
+    kind = r < 0.62 ? "peck" : "look";
+  } else if (PERCHERS.includes(pet.type)) {
+    kind = r < 0.4 ? "sniff" : r < 0.78 ? "sit" : "look";
+  } else if (GRAZERS.includes(pet.type)) {
+    kind = r < 0.55 ? "graze" : r < 0.85 ? "sniff" : "look";
+  } else {
+    kind = r < 0.5 ? "sniff" : "look";
+  }
+
+  const tin = Math.min(1, Math.max(0, (local - PAUSE_AT) / 0.7));
+  const tout = Math.min(1, Math.max(0, (PAUSE_AT + PAUSE_LEN - local) / 0.7));
+  const e = Math.min(tin, tout);
+  const ease = e * e * (3 - 2 * e);
+
+  let target: number;
+  switch (kind) {
+    case "graze":
+      target = 1.0 + Math.sin(tSec * 8.5) * 0.06;
+      break;
+    case "sniff":
+      target = 0.62 + Math.sin(tSec * 7.0) * 0.07;
+      break;
+    case "peck": {
+      const pp = (((local - PAUSE_AT) / PAUSE_LEN) * 3) % 1;
+      target = Math.sin(pp * Math.PI) * 0.85;
+      break;
+    }
+    default:
+      target = 0.1 + Math.sin(tSec * 1.6) * 0.12;
+  }
+  return { x, facing, kind, headPitch: target * ease, stride, poseEase: ease };
+}
+
+/** rAF-крючок: пересчитывает повадки ~24 раза в секунду (SSR-safe). */
+function useBehavior(pet: Pet, active: boolean): PetBehavior | null {
+  const [bhv, setBhv] = useState<PetBehavior | null>(null);
+  const petRef = useRef(pet);
+  useEffect(() => {
+    petRef.current = pet;
+  }, [pet]);
+  useEffect(() => {
+    if (!active) return; // на паузе цикл не нужен
+    const t0 = performance.now();
+    let raf = 0;
+    let last = -1;
+    const loop = (now: number) => {
+      const tSec = (now - t0) / 1000;
+      const frame = Math.floor(tSec * 24);
+      if (frame !== last) {
+        last = frame;
+        setBhv(petBehavior(petRef.current, tSec));
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [active, pet.id]);
+  // Пока повадки неактивны (сон/яйцо) — фигура их не использует.
+  return active ? bhv : null;
+}
+
+// ── Спрайт питомца + аксессуары ────────────────────────────────────────
+
+interface SpriteLayout {
+  /** Точка опоры (контакт с землёй) в координатах сцены. */
+  gx: number;
+  gy: number;
+  /** Масштаб глубины (полосы лужайки). */
+  depth: number;
+  facing: number;
+  /** Наклон в РАДИАНКАХ (как в Dart canvas.rotate). */
+  tiltRad: number;
+  /** Подъём над землёй (прыжки, качка). */
+  lift: number;
+}
+
+function SpritePet({
+  pet,
+  sleeping,
+  layout,
+}: {
+  pet: Pet;
+  sleeping: boolean;
+  layout: SpriteLayout;
+}) {
+  const stage = petStage(pet);
+  const meta = SPRITE_META[pet.type] ?? { h: 0.16, sleep: true };
+  const aspect = spriteAspect(pet.type);
+  const boxH = VB_H * meta.h * spriteStageScale(stage) * layout.depth;
+  const boxW = boxH * aspect;
+  const useSleep = sleeping && meta.sleep;
+  const src = spriteAsset(pet.type, useSleep);
+  const anchors = anchorsFor(pet.type);
+
+  return (
+    <g
+      transform={`translate(${layout.gx} ${layout.gy + layout.lift}) rotate(${(layout.tiltRad * 180) / Math.PI}) scale(${layout.facing} 1)`}
+    >
+      <image
+        href={src}
+        x={-boxW / 2}
+        y={-boxH}
+        width={boxW}
+        height={boxH}
+        preserveAspectRatio="none"
+        style={{ filter: sleeping && !meta.sleep ? "brightness(0.88)" : undefined }}
+      />
+      {!useSleep && <Accessories pet={pet} boxW={boxW} boxH={boxH} anchors={anchors} />}
+    </g>
+  );
+}
+
+/** Аксессуары гардероба по якорям (u = 1% ширины спрайта). */
+function Accessories({
+  pet,
+  boxW,
+  boxH,
+  anchors,
+}: {
+  pet: Pet;
+  boxW: number;
+  boxH: number;
+  anchors: ReturnType<typeof anchorsFor>;
+}) {
+  const u = boxW / 100;
+  const pt = (p: [number, number]) => ({ x: p[0] * boxW - boxW / 2, y: p[1] * boxH - boxH });
+  const hat = pt(anchors.hat);
+  const neck = pt(anchors.neck);
+  const eye = pt(anchors.eye);
+  return (
+    <g>
+      {pet.hat === "cap" && (
+        <g>
+          <path d={`M ${hat.x - 14 * u} ${hat.y} Q ${hat.x} ${hat.y - 22 * u} ${hat.x + 14 * u} ${hat.y} Z`} fill="#EF476F" />
+          <rect x={hat.x + 6 * u} y={hat.y - 2 * u} width={14 * u} height={4 * u} rx={3} fill="#D63860" />
+          <circle cx={hat.x} cy={hat.y - 12 * u} r={2.2 * u} fill="#FFFFFF" />
+        </g>
+      )}
+      {pet.hat === "beanie" && (
+        <g>
+          <path d={`M ${hat.x - 14 * u} ${hat.y} Q ${hat.x} ${hat.y - 20 * u} ${hat.x + 14 * u} ${hat.y} Z`} fill="#B892E0" />
+          <rect x={hat.x - 14 * u} y={hat.y - 2 * u} width={28 * u} height={4.4 * u} rx={2} fill="#9A77C9" />
+          <circle cx={hat.x} cy={hat.y - 20 * u} r={3.4 * u} fill="#F7F1EA" />
+        </g>
+      )}
+      {pet.hat === "crown" && (
+        <g>
+          <path
+            d={`M ${hat.x - 11 * u} ${hat.y} L ${hat.x - 11 * u} ${hat.y - 10 * u} L ${hat.x - 5.5 * u} ${hat.y - 5 * u} L ${hat.x} ${hat.y - 12 * u} L ${hat.x + 5.5 * u} ${hat.y - 5 * u} L ${hat.x + 11 * u} ${hat.y - 10 * u} L ${hat.x + 11 * u} ${hat.y} Z`}
+            fill="#FFC800"
+          />
+          <circle cx={hat.x} cy={hat.y - 3 * u} r={1.8 * u} fill="#EF476F" />
+        </g>
+      )}
+      {pet.hat === "flowerPin" &&
+        [0, 1, 2, 3, 4].map((i) => {
+          const a = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+          return <circle key={i} cx={hat.x + Math.cos(a) * 3.4 * u} cy={hat.y + Math.sin(a) * 3.4 * u} r={2.4 * u} fill="#FF8FB1" />;
+        })}
+      {pet.hat === "flowerPin" && <circle cx={hat.x} cy={hat.y} r={2.2 * u} fill="#FFD166" />}
+
+      {pet.neck === "scarf" && (
+        <g>
+          <rect x={neck.x - 13 * u} y={neck.y - 3.5 * u} width={26 * u} height={7 * u} rx={3.5 * u} fill="#EF6461" />
+          <rect x={neck.x - 12 * u} y={neck.y} width={7 * u} height={15 * u} rx={3 * u} fill="#D63860" />
+        </g>
+      )}
+      {pet.neck === "bow" && (
+        <g>
+          <path d={`M ${neck.x} ${neck.y} L ${neck.x - 12 * u} ${neck.y - 7 * u} Q ${neck.x - 15 * u} ${neck.y} ${neck.x - 12 * u} ${neck.y + 7 * u} Z`} fill="#FF6FA5" />
+          <path d={`M ${neck.x} ${neck.y} L ${neck.x + 12 * u} ${neck.y - 7 * u} Q ${neck.x + 15 * u} ${neck.y} ${neck.x + 12 * u} ${neck.y + 7 * u} Z`} fill="#FF6FA5" />
+          <circle cx={neck.x} cy={neck.y} r={2.6 * u} fill="#E85D8A" />
+        </g>
+      )}
+      {pet.neck === "bandana" && (
+        <g>
+          <path d={`M ${neck.x - 13 * u} ${neck.y - 3 * u} L ${neck.x + 13 * u} ${neck.y - 3 * u} L ${neck.x} ${neck.y + 11 * u} Z`} fill="#3E7BFA" />
+          <rect x={neck.x - 13 * u} y={neck.y - 5.5 * u} width={26 * u} height={5 * u} rx={2.5 * u} fill="#2F63D6" />
+        </g>
+      )}
+      {pet.neck === "bell" && (
+        <g>
+          <rect x={neck.x - 12 * u} y={neck.y - 1.8 * u} width={24 * u} height={3.6 * u} rx={2 * u} fill="#D63860" />
+          <circle cx={neck.x} cy={neck.y + 5 * u} r={4.6 * u} fill="#FFC800" />
+          <circle cx={neck.x} cy={neck.y + 5 * u} r={2.1 * u} fill="#E09E00" />
+          <circle cx={neck.x} cy={neck.y + 3.4 * u} r={1.1 * u} fill="#FFFFFF" />
+        </g>
+      )}
+      {pet.face === "glasses" && (
+        <g stroke="#3A3A3A" strokeWidth={1.8 * u} fill="none">
+          <circle cx={eye.x} cy={eye.y} r={5.2 * u} />
+          <line x1={eye.x + 5.2 * u} y1={eye.y} x2={eye.x + 11 * u} y2={eye.y - 1.5 * u} />
+        </g>
+      )}
+      {pet.face === "shades" && (
+        <g>
+          <rect x={eye.x - 5.5 * u} y={eye.y - 4 * u} width={11 * u} height={8 * u} rx={3 * u} fill="#23262B" />
+          <line x1={eye.x + 5.5 * u} y1={eye.y - 1 * u} x2={eye.x + 11 * u} y2={eye.y - 2.5 * u} stroke="#23262B" strokeWidth={1.8 * u} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+/** zzz над спящим питомцем. */
+function Zzz({ x, y, s }: { x: number; y: number; s: number }) {
+  return (
+    <g className="ttg-zzz" fill="#6B7B8C" fontWeight="800" fontFamily="inherit">
+      <text x={x} y={y} fontSize={11 * s} opacity="0.9">z</text>
+      <text x={x + 9 * s} y={y - 10 * s} fontSize={14 * s} opacity="0.7">z</text>
+      <text x={x + 18 * s} y={y - 20 * s} fontSize={17 * s} opacity="0.5">Z</text>
+    </g>
+  );
+}
+
+// ── Фигура питомца в сцене ─────────────────────────────────────────────
+
+function PlantFigure({
   pet,
   index,
   total,
   sleeping,
-  pondActive,
 }: {
   pet: Pet;
   index: number;
   total: number;
   sleeping: boolean;
-  pondActive: boolean;
 }) {
   const stage = petStage(pet);
-  const s = 0.55 + stage * 0.22;
-  const isLast = index === total - 1;
-  const aquatic = isAquatic(pet.type);
-  const plant = isPlant(pet.type);
-  const walkable = stage > 0 && !plant && !aquatic;
-
-  // v2.0.0: движок повадок — гуляет, принюхивается, щиплет траву, сидит.
-  const bhv = useBehavior(pet, walkable && !sleeping);
-
-  // Водные питомцы живут в пруду по центру; остальные — на лужайке.
-  const x = pondActive && aquatic ? 200 : walkable && !sleeping ? 400 * (0.16 + 0.68 * (bhv?.x ?? 0.5)) : 400 * (total === 1 ? 0.5 : 0.18 + (0.64 * index) / Math.max(1, total - 1));
-  const y = aquatic ? GROUND_Y + 24 : GROUND_Y;
-
-  // Искусство питомца (общее для сна и ходьбы).
-  const art =
-    stage === 0 ? (
-      plant ? (
-        <SeedBed s={s} progress={stageProgress(pet)} />
-      ) : (
-        <Egg spot={bodyColor(pet.type)} progress={stageProgress(pet)} />
-      )
-    ) : plant ? (
-      <Plant s={s} type={pet.type} sleeping={sleeping} />
-    ) : (
-      <Animal s={s} type={pet.type} sleeping={sleeping} pet={pet} bhv={bhv} />
+  const x0 = VB_W * GEOM.bedX0F;
+  const x1 = VB_W * GEOM.bedX1F;
+  const slotX = x0 + (x1 - x0) * (total === 1 ? 0.5 : index / (total - 1));
+  const baseY = VB_H * GEOM.bedYF - 2;
+  if (stage === 0) {
+    return (
+      <g transform={`translate(${slotX} ${baseY})`}>
+        <SeedBed progress={stageProgress(pet)} />
+        {sleeping && <Zzz x={22} y={-26} s={1} />}
+      </g>
     );
+  }
+  const meta = SPRITE_META[pet.type] ?? { h: 0.14, sleep: false };
+  const boxH = VB_H * meta.h * spriteStageScale(stage);
+  const boxW = boxH * spriteAspect(pet.type);
+  return (
+    <g transform={`translate(${slotX - boxW / 2} ${baseY})`}>
+      <g
+        className="ttg-sway"
+        style={{
+          animationDuration: `${3.4 + (index % 3) * 0.8}s`,
+          animationDelay: `${-index * 1.1}s`,
+          transformBox: "fill-box",
+          transformOrigin: "50% 100%",
+        }}
+      >
+        <SpritePet
+          pet={pet}
+          sleeping={sleeping}
+          layout={{ gx: boxW / 2, gy: 0, depth: 1, facing: 1, tiltRad: 0, lift: 0 }}
+        />
+      </g>
+      {sleeping && <Zzz x={boxW * 0.42} y={-boxH * 0.95} s={1} />}
+    </g>
+  );
+}
+
+function WaterFigure({
+  pet,
+  sleeping,
+  active,
+}: {
+  pet: Pet;
+  sleeping: boolean;
+  active: boolean;
+}) {
+  // Патрулирование пруда — детерминировано, как в Dart (sin/cos от tSec).
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const t0 = performance.now();
+    let raf = 0;
+    const loop = (now: number) => {
+      setTick(Math.floor(((now - t0) / 1000) * 24));
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
+
+  const stage = petStage(pet);
+  const seed = strHash(pet.id) & 0x7fffffff;
+  const off = (seed % 1000) / 100;
+  const tSec = tick / 24;
+  const cx = VB_W * GEOM.pondCXF;
+  const cy = VB_H * GEOM.pondCYF;
+  const rw = VB_W * GEOM.pondRWF;
+  const rh = VB_H * GEOM.pondRHF;
+
+  const swimT = tSec * (pet.type === "crab" ? 0.14 : 0.22) + off;
+  const dx = Math.sin(swimT) * rw * 0.45;
+  const dy = Math.sin(tSec * 1.2 + off * 2) * rh * 0.1;
+  const goingRight = Math.cos(swimT) > 0;
+  const baseY =
+    pet.type === "crab" ? cy + rh * 0.42 + dy : cy - rh * 0.22 + dy;
+
+  const meta = SPRITE_META[pet.type] ?? { h: 0.12, sleep: true };
+  let boxH = VB_H * meta.h * spriteStageScale(stage);
+  let boxW = boxH * spriteAspect(pet.type);
+  if (boxW > rw * 1.25) {
+    boxW = rw * 1.25;
+    boxH = boxW / spriteAspect(pet.type);
+  }
 
   return (
-    <g transform={`translate(${x} ${y})`}>
-      {aquatic ? (
-        <g className="ttg-bob-sleep" style={{ animationDelay: `${-index * 0.7}s` }}>
-          {art}
-        </g>
-      ) : walkable && !sleeping ? (
-        /* v2.0.0: зверь идёт в свою сторону (разворот по повадкам). */
-        <g transform={`scale(${bhv?.facing ?? 1} 1)`}>
-          <ellipse cx={0} cy={3} rx={38 * s} ry={5.5 * s} fill="#000000" opacity="0.08" />
-          {art}
-        </g>
-      ) : (
-        <g className="ttg-bob-sleep" style={{ animationDelay: `${-index * 0.7}s` }}>
-          {stage > 0 && !plant && (
-            <ellipse cx={0} cy={3} rx={38 * s} ry={5.5 * s} fill="#000000" opacity="0.08" />
-          )}
-          {art}
-        </g>
-      )}
-      {sleeping && isLast && !plant && (
-        <g className="ttg-zzz" fill="#6B7B8C" fontWeight="800" fontFamily="inherit">
-          <text x={26 * s} y={-62 * s} fontSize={11 * s} opacity="0.9">z</text>
-          <text x={35 * s} y={-72 * s} fontSize={14 * s} opacity="0.7">z</text>
-          <text x={44 * s} y={-82 * s} fontSize={17 * s} opacity="0.5">Z</text>
+    <g>
+      <SpritePet
+        pet={pet}
+        sleeping={sleeping}
+        layout={{
+          gx: cx + dx,
+          gy: baseY,
+          depth: 1,
+          facing: goingRight ? 1 : -1,
+          tiltRad: Math.sin(tSec * 1.1 + off) * 0.03,
+          lift: 0,
+        }}
+      />
+      {/* Фонтанчик у кита каждые ~7 с */}
+      {pet.type === "whale" && !sleeping && (
+        <g className="ttg-fountain" transform={`translate(${cx + dx - boxW * 0.28 * (goingRight ? 1 : -1)} ${baseY - boxH * 0.9})`}>
+          <line x1={0} y1={0} x2={0} y2={-9} stroke="#BFE6F7" strokeWidth="2.4" strokeLinecap="round" opacity="0.85" />
+          {[0, 1, 2, 3].map((i) => (
+            <circle key={i} cx={-3 + i * 2.2} cy={-12 - (i % 2) * 4} r={1.6} fill="#9FD4EF" opacity="0.8" />
+          ))}
         </g>
       )}
+      {sleeping && <Zzz x={cx + dx + boxW * 0.4} y={baseY - boxH} s={1} />}
+    </g>
+  );
+}
+
+function LandFigure({
+  pet,
+  index,
+  total,
+  sleeping,
+  eggIndex,
+}: {
+  pet: Pet;
+  index: number;
+  total: number;
+  sleeping: boolean;
+  eggIndex: number;
+}) {
+  const stage = petStage(pet);
+  const ys = laneYs(total);
+  const scales = laneScales(total);
+  const laneY = VB_H * ys[index];
+  const depth = scales[index];
+  const isEgg = stage === 0;
+
+  // Хук вызывается безусловно (правила хуков), даже для яйца/сна.
+  const bhv = useBehavior(pet, !sleeping && !isEgg);
+
+  // Яйцо стоит слева на своей полосе и покачивается.
+  if (isEgg) {
+    return (
+      <g transform={`translate(${VB_W * (0.12 + 0.09 * eggIndex)} ${laneY})`}>
+        <Egg spot={bodyColor(pet.type)} progress={stageProgress(pet)} />
+      </g>
+    );
+  }
+
+  const hasSleep = SPRITE_META[pet.type]?.sleep ?? true;
+  void hasSleep;
+
+  if (sleeping) {
+    const spotX = VB_W * (total === 1 ? 0.5 : 0.14 + (0.72 * index) / Math.max(1, total - 1));
+    const meta = SPRITE_META[pet.type] ?? { h: 0.16, sleep: true };
+    const boxH = VB_H * meta.h * spriteStageScale(stage) * depth;
+    const boxW = boxH * spriteAspect(pet.type);
+    return (
+      <g>
+        <ellipse cx={spotX} cy={laneY + 2} rx={boxW * 0.31} ry={boxW * 0.05} fill="#2E7D32" opacity="0.14" />
+        <SpritePet
+          pet={pet}
+          sleeping
+          layout={{ gx: spotX, gy: laneY, depth, facing: 1, tiltRad: 0, lift: 0 }}
+        />
+        <Zzz x={spotX + boxW * 0.44} y={laneY - boxH * 0.92} s={depth} />
+      </g>
+    );
+  }
+
+  // Повадки: наклон (рад, как в Dart) и подпрыгивание по типу позы.
+  let tiltRad = 0;
+  let lift = 0;
+  if (HOP_PETS.includes(pet.type)) {
+    const hopPhase = ((performance.now() / 1000) * 2 * Math.PI) / 0.85;
+    const hopAmp = bhv && bhv.kind === "walk" ? 1 : 0;
+    lift = -Math.abs(Math.sin(hopPhase)) * 0.28 * hopAmp;
+    tiltRad = Math.sin(hopPhase + 0.6) * 0.1 * hopAmp;
+  } else if (bhv?.kind === "walk") {
+    tiltRad = Math.sin(bhv.stride) * 0.035;
+    lift = -Math.abs(Math.sin(bhv.stride * 2)) * 2;
+  } else if (bhv) {
+    switch (bhv.kind) {
+      case "graze":
+        tiltRad = 0.14 + Math.sin(performance.now() / 1000 * 8.5) * 0.03;
+        break;
+      case "sniff":
+        tiltRad = 0.07 + Math.sin(performance.now() / 1000 * 7.0) * 0.02;
+        break;
+      case "peck":
+        tiltRad = 0.24 + Math.sin(performance.now() / 1000 * 9.0) * 0.05;
+        break;
+      case "look":
+        tiltRad = -0.02 + Math.sin(performance.now() / 1000 * 1.6) * 0.025;
+        break;
+      default:
+        tiltRad = Math.sin(performance.now() / 1000 * 1.2 + index) * 0.012;
+    }
+  }
+
+  const bhvX = bhv?.x ?? 0.5;
+  const gx = VB_W * (0.13 + 0.74 * bhvX);
+  const meta = SPRITE_META[pet.type] ?? { h: 0.16, sleep: true };
+  const boxH = VB_H * meta.h * spriteStageScale(stage) * depth;
+  const boxW = boxH * spriteAspect(pet.type);
+
+  return (
+    <g>
+      <ellipse cx={gx} cy={laneY + 2} rx={boxW * 0.31} ry={boxW * 0.05} fill="#2E7D32" opacity="0.18" />
+      <SpritePet
+        pet={pet}
+        sleeping={false}
+        layout={{
+          gx,
+          gy: laneY,
+          depth,
+          facing: bhv?.facing ?? 1,
+          tiltRad,
+          lift: lift * boxH,
+        }}
+      />
     </g>
   );
 }
@@ -1525,12 +727,15 @@ export function PetScene({
   frame?: string;
 }) {
   const hasPond = pets.some((p) => isAquatic(p.type));
+  const hasBed = pets.some((p) => isPlant(p.type));
   const dimSky = weather === "cloudy" || weather === "rain" || weather === "thunder";
   const frameColor =
     frame === "gold" ? "#FFC800" : frame === "neon" ? "#1CB0F6" : frame === "flower" ? "#FF8FB1" : null;
 
-  const landPets = pets.filter((p) => !isAquatic(p.type));
-  const waterPets = pets.filter((p) => isAquatic(p.type));
+  const plants = pets.filter((p) => isPlant(p.type));
+  const water = pets.filter((p) => isAquatic(p.type));
+  const land = pets.filter((p) => !isAquatic(p.type) && !isPlant(p.type));
+  let eggCounter = 0;
 
   const skyColors: [string, string] =
     weather === "thunder"
@@ -1542,6 +747,11 @@ export function PetScene({
           : weather === "snow"
             ? ["#BAD8EE", "#EFF7EF"]
             : ["#A6E4FF", "#EAF9E0"];
+
+  const pondCX = VB_W * GEOM.pondCXF;
+  const pondCY = VB_H * GEOM.pondCYF;
+  const pondRW = VB_W * GEOM.pondRWF;
+  const pondRH = VB_H * GEOM.pondRHF;
 
   return (
     <svg
@@ -1587,7 +797,7 @@ export function PetScene({
       {/* Цветочки */}
       {[
         { x: 24, y: 211.2, c: "#FF8FB1" },
-        { x: 112, y: 201.6, c: "#FFD166" },
+        { x: 144, y: 201.6, c: "#FFD166" },
         { x: 288, y: 216, c: "#EF476F" },
         { x: 380, y: 206.4, c: "#FFD166" },
       ].map((f, i) => (
@@ -1597,7 +807,7 @@ export function PetScene({
         </g>
       ))}
 
-      {/* Трава пучками — качается на ветру (v2.0.0) */}
+      {/* Трава пучками — качается на ветру */}
       {[
         { x: 22, y: 209, h: 15 },
         { x: 74, y: 200, h: 19 },
@@ -1632,49 +842,65 @@ export function PetScene({
         </g>
       ))}
 
-      {/* Пруд для водных питомцев (v1.8.0) */}
-      {hasPond && (
+      {/* Грядка растений слева сзади */}
+      {hasBed && (
         <g>
-          <ellipse cx="200" cy="198.4" rx={400 * 0.3 * 1.08} ry={240 * 0.115 * 1.08} fill="#E8D8A8" />
-          <ellipse cx="200" cy="198.4" rx={400 * 0.3} ry={240 * 0.115} fill="#6EC1E4" />
-          <path d="M 170 191 Q 185 186 200 191" stroke="#FFFFFF" strokeWidth="2" fill="none" opacity="0.5" strokeLinecap="round" />
-          <path d="M 215 205 Q 230 200 245 205" stroke="#FFFFFF" strokeWidth="2" fill="none" opacity="0.5" strokeLinecap="round" />
+          <rect
+            x={VB_W * GEOM.bedX0F - 4}
+            y={VB_H * GEOM.bedYF - 13.2 - 4}
+            width={(VB_W * GEOM.bedX1F - VB_W * GEOM.bedX0F) + 8}
+            height={13.2 + 6 + 8}
+            rx={12}
+            fill="#A9744F"
+          />
+          <rect
+            x={VB_W * GEOM.bedX0F}
+            y={VB_H * GEOM.bedYF - 13.2}
+            width={VB_W * GEOM.bedX1F - VB_W * GEOM.bedX0F}
+            height={13.2 + 6}
+            rx={10}
+            fill={SOIL}
+          />
+          <rect
+            x={VB_W * GEOM.bedX0F + 4}
+            y={VB_H * GEOM.bedYF - 13.2 + 4}
+            width={VB_W * GEOM.bedX1F - VB_W * GEOM.bedX0F - 8}
+            height={13.2 + 6 - 8}
+            rx={8}
+            fill="#96683F"
+          />
         </g>
       )}
 
-      {/* Сухопутные питомцы */}
-      {landPets.map((p, i) => (
-        <PetFigure
-          key={p.id}
-          pet={p}
-          index={i}
-          total={landPets.length}
-          sleeping={sleeping}
-          pondActive={false}
-        />
+      {/* Растения на грядке */}
+      {plants.map((p, i) => (
+        <PlantFigure key={p.id} pet={p} index={i} total={plants.length} sleeping={sleeping} />
       ))}
 
+      {/* Пруд для водных питомцев (справа сзади) */}
+      {hasPond && (
+        <g>
+          <ellipse cx={pondCX} cy={pondCY} rx={pondRW * 1.08} ry={pondRH * 1.08} fill="#E8D8A8" />
+          <ellipse cx={pondCX} cy={pondCY} rx={pondRW} ry={pondRH} fill="#6EC1E4" />
+          <path d={`M ${pondCX - 30} ${pondCY - 6} Q ${pondCX - 15} ${pondCY - 11} ${pondCX} ${pondCY - 6}`} stroke="#FFFFFF" strokeWidth="2" fill="none" opacity="0.5" strokeLinecap="round" />
+          <path d={`M ${pondCX + 15} ${pondCY + 7} Q ${pondCX + 30} ${pondCY + 2} ${pondCX + 45} ${pondCY + 7}`} stroke="#FFFFFF" strokeWidth="2" fill="none" opacity="0.5" strokeLinecap="round" />
+        </g>
+      )}
+
       {/* Водные питомцы в пруду */}
-      {waterPets.map((p, i) => (
-        <PetFigure
-          key={p.id}
-          pet={p}
-          index={landPets.length + i}
-          total={pets.length}
-          sleeping={sleeping}
-          pondActive
-        />
+      {water.map((p) => (
+        <WaterFigure key={p.id} pet={p} sleeping={sleeping} active={!sleeping} />
       ))}
 
       {/* Передняя кромка воды — тела «погружены» */}
       {hasPond && (
         <g>
-          <ellipse cx="200" cy="198.4" rx={400 * 0.3} ry={240 * 0.115} fill="#6EC1E4" opacity="0.45" />
+          <ellipse cx={pondCX} cy={pondCY} rx={pondRW} ry={pondRH} fill="#6EC1E4" opacity="0.45" />
           <ellipse
-            cx="200"
-            cy="206"
-            rx={400 * 0.3 * 0.5}
-            ry={240 * 0.115 * 0.4}
+            cx={pondCX}
+            cy={pondCY + 7.6}
+            rx={pondRW * 0.5}
+            ry={pondRH * 0.4}
             stroke="#FFFFFF"
             strokeWidth="2"
             fill="none"
@@ -1683,9 +909,25 @@ export function PetScene({
         </g>
       )}
 
+      {/* Сухопутные питомцы по полосам глубины */}
+      {land.map((p, i) => {
+        const stage = petStage(p);
+        const eggIndex = stage === 0 ? eggCounter++ : -1;
+        return (
+          <LandFigure
+            key={p.id}
+            pet={p}
+            index={i}
+            total={land.length}
+            sleeping={sleeping}
+            eggIndex={eggIndex}
+          />
+        );
+      })}
+
       <WeatherLayers weather={weather} />
 
-      {/* Бабочки порхают над лужайкой (v2.0.0) */}
+      {/* Бабочки порхают над лужайкой */}
       {!sleeping && weather !== "thunder" && weather !== "rain" && (
         <>
           <g className="ttg-fly" style={{ animationDuration: "17s" }}>
@@ -1717,7 +959,7 @@ export function PetScene({
         </>
       )}
 
-      {/* Декоративная рамка из магазина (v1.5.0) */}
+      {/* Декоративная рамка из магазина */}
       {frameColor && (
         <g>
           <rect x="7" y="7" width="386" height="226" rx="24" stroke={frameColor} strokeWidth="5.5" fill="none" />

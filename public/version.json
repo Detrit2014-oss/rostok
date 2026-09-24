@@ -1,7 +1,7 @@
 {
-  "latest_version": "2.1.0",
+  "latest_version": "2.3.0",
   "min_supported_version": "1.0.0",
-  "notes": "Что нового в 2.1.0 (демо-обновление): настоящие звери с повадками на лужайке.",
+  "notes": "Что нового в 2.3.0 (демо-обновление): следующий шаг «Ростка».",
   "force_update": false,
   "android_url": "https://play.google.com/store/apps/details?id=REPLACE_ME",
   "ios_url": "https://apps.apple.com/app/REPLACE_ME"

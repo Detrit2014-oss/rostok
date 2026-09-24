@@ -465,9 +465,6 @@ export const useTTG = create<TTGState>()(
         set({
           pets: s.pets.map((p, i) => {
             if (i !== idx) return p;
-            if (slot === "skin") {
-              return { ...p, skin: p.skin === itemId ? "classic" : itemId };
-            }
             const key = slot as "hat" | "neck" | "face";
             const cur = p[key] ?? "none";
             return { ...p, [key]: cur === itemId ? "none" : itemId };
@@ -723,7 +720,7 @@ export const useTTG = create<TTGState>()(
     }),
     {
       name: "ttg-web-state-v1",
-      version: 4,
+      version: 5,
       partialize: (s) => ({
         pets: s.pets,
         totalMinutes: s.totalMinutes,
@@ -798,6 +795,23 @@ export const useTTG = create<TTGState>()(
             claimedAges: p.claimedAges ?? [],
           }));
           s.wardrobe = s.wardrobe ?? [];
+        }
+        if (version < 5) {
+          // v5 (v2.1.0): окрасы-скины заменены новыми аксессуарами —
+          // спрайт реалистичного зверя нельзя перекрасить. Купленные
+          // окрасы возвращаются монетками (цены покупки).
+          const skinPrices: Record<string, number> = { golden: 500, mint: 300, rose: 300 };
+          let refund = 0;
+          s.wardrobe = (s.wardrobe ?? []).filter((id) => {
+            const price = skinPrices[id];
+            if (price) {
+              refund += price;
+              return false;
+            }
+            return true;
+          });
+          if (refund > 0) s.coins = (s.coins ?? 0) + refund;
+          s.pets = (s.pets ?? []).map((p) => ({ ...p, skin: "classic" }));
         }
         return s as TTGState;
       },

@@ -17,7 +17,7 @@ const FRAMES: { id: string; title: string; emoji: string; price: number; sub: st
   { id: "flower", title: "Цветочная", emoji: "🌸", price: 200, sub: "Весна круглый год" },
 ];
 
-const SLOTS: WardrobeItem["slot"][] = ["hat", "neck", "face", "skin"];
+const SLOTS: WardrobeItem["slot"][] = ["hat", "neck", "face"];
 
 export function ShopScreen({ onClose }: { onClose: () => void }) {
   const coins = useTTG((s) => s.coins);
@@ -43,8 +43,6 @@ export function ShopScreen({ onClose }: { onClose: () => void }) {
         return (active.neck ?? "none") === w.id;
       case "face":
         return (active.face ?? "none") === w.id;
-      case "skin":
-        return (active.skin ?? "classic") === w.id;
       default:
         return false;
     }

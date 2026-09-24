@@ -257,8 +257,8 @@ export const PET_CATALOG: {
   { name: "Росточек", type: "sprout", emoji: "🌱", desc: "Самый первый друг — символ «Ростка»", accusative: "Росточек" },
 ];
 
-export const K_APP_VERSION = "2.1.0";
-export const K_APP_BUILD_NUMBER = 10;
+export const K_APP_VERSION = "2.2.0";
+export const K_APP_BUILD_NUMBER = 12;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
 export const K_UPDATE_CHECK_INTERVAL_HOURS = 6;
@@ -314,81 +314,50 @@ export function bellyColor(type: PetType): string {
   return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
 }
 
-/** Таблица внешности видов (зеркало lib/data/species_style.dart).
- *  v1.9.0: телосложение build (quad|bird|hop|pond|plant), шея, голова. */
+/** Таблица фирменных цветов видов (зеркало lib/data/species_style.dart).
+ *  С v2.1.0 внешность — реалистичные спрайты (SPRITE_META), цвета
+ *  используются для точек на яйце и акцентов интерфейса. */
 export interface SpeciesStyle {
   body: string;
   belly?: string;
-  ear?: "none" | "triangle" | "round" | "long" | "tuft" | "horns" | "pom" | "crest";
-  tail?: "none" | "bushy" | "thin" | "curl" | "puff";
-  muzzle?:
-    | "smile"
-    | "beak"
-    | "duckBeak"
-    | "bearMuzzle"
-    | "buckteeth"
-    | "whaleMouth"
-    | "topEyes"
-    | "snout"
-    | "foxMuzzle"
-    | "catMuzzle"
-    | "longMuzzle";
-  extra?:
-    | "none"
-    | "spikes"
-    | "patches"
-    | "shell"
-    | "wings"
-    | "mask"
-    | "mane"
-    | "antler"
-    | "spots"
-    | "claws"
-    | "tentacles";
-  whiteBelly?: boolean;
-  build?: "quad" | "bird" | "hop" | "pond" | "plant";
-  neck?: number;
-  headScale?: number;
-  bodyLen?: number;
-  legLen?: number;
 }
 
 const SPECIES_STYLES: Record<PetType, SpeciesStyle> = {
   // ── Четвероногие ходоки ──
-  fox: { body: "#FF9F45", ear: "triangle", tail: "bushy", muzzle: "foxMuzzle", extra: "spots" },
-  cat: { body: "#A8B8C8", ear: "triangle", tail: "thin", muzzle: "catMuzzle", bodyLen: 0.92 },
-  dragon: { body: "#62C46A", belly: "#D9F2DC", ear: "horns", extra: "wings", neck: 0.42 },
-  bunny: { body: "#D9CFC4", belly: "#F7F1EA", ear: "long", muzzle: "buckteeth", build: "hop", bodyLen: 0.88 },
-  hedgehog: { body: "#C08552", belly: "#F0DCBE", ear: "round", muzzle: "foxMuzzle", extra: "spikes", bodyLen: 0.94 },
-  panda: { body: "#F2EEE4", ear: "pom", extra: "patches", whiteBelly: true, bodyLen: 1.12, legLen: 0.86 },
-  bear: { body: "#A9744F", ear: "round", muzzle: "bearMuzzle", bodyLen: 1.14, legLen: 0.9 },
-  dog: { body: "#F2C078", belly: "#FBE8C8", ear: "triangle", tail: "bushy", muzzle: "bearMuzzle" },
-  deer: { body: "#D9A06C", belly: "#F7E7D2", ear: "round", extra: "antler", muzzle: "longMuzzle", neck: 0.72, legLen: 1.18 },
-  squirrel: { body: "#C97B4A", belly: "#F4E3D2", ear: "tuft", tail: "bushy", muzzle: "foxMuzzle", bodyLen: 0.9 },
-  raccoon: { body: "#9AA3AC", belly: "#E5E9ED", ear: "triangle", muzzle: "foxMuzzle", extra: "mask" },
-  koala: { body: "#B5C4CE", belly: "#E9EFF3", ear: "pom", muzzle: "bearMuzzle", legLen: 0.8 },
-  pig: { body: "#F5A8B8", belly: "#FDE3E9", ear: "triangle", tail: "curl", muzzle: "snout", bodyLen: 1.16, legLen: 0.78 },
-  unicorn: { body: "#F3EAFB", ear: "triangle", extra: "mane", muzzle: "longMuzzle", whiteBelly: true, neck: 0.72, legLen: 1.15 },
-  // ── Птицы (две лапы) ──
-  owl: { body: "#A97FE0", belly: "#EFE3FB", ear: "tuft", muzzle: "beak", build: "bird", headScale: 1.25 },
-  duck: { body: "#FFD24C", ear: "tuft", muzzle: "duckBeak", build: "bird" },
-  chick: { body: "#FFD94C", ear: "tuft", muzzle: "beak", build: "bird", headScale: 1.3 },
-  penguin: { body: "#56789A", muzzle: "beak", whiteBelly: true, build: "bird", bodyLen: 0.82 },
+  fox: { body: "#FF9F45" },
+  cat: { body: "#A8B8C8" },
+  dragon: { body: "#62C46A", belly: "#D9F2DC" },
+  bunny: { body: "#D9CFC4", belly: "#F7F1EA" },
+  hedgehog: { body: "#C08552", belly: "#F0DCBE" },
+  panda: { body: "#F2EEE4" },
+  bear: { body: "#A9744F" },
+  dog: { body: "#F2C078", belly: "#FBE8C8" },
+  deer: { body: "#D9A06C", belly: "#F7E7D2" },
+  squirrel: { body: "#C97B4A", belly: "#F4E3D2" },
+  raccoon: { body: "#9AA3AC", belly: "#E5E9ED" },
+  koala: { body: "#B5C4CE", belly: "#E9EFF3" },
+  pig: { body: "#F5A8B8", belly: "#FDE3E9" },
+  unicorn: { body: "#F3EAFB" },
+  // ── Птицы ──
+  owl: { body: "#A97FE0", belly: "#EFE3FB" },
+  duck: { body: "#FFD24C" },
+  chick: { body: "#FFD94C" },
+  penguin: { body: "#56789A" },
   // ── Прыгуны ──
-  frog: { body: "#7CC46B", belly: "#E2F4DC", muzzle: "topEyes", build: "hop" },
+  frog: { body: "#7CC46B", belly: "#E2F4DC" },
   // ── Водные жители пруда ──
-  seal: { body: "#B8C9D9", belly: "#E8EFF5", muzzle: "smile", build: "pond" },
-  whale: { body: "#5FA8D3", belly: "#DCEFF9", muzzle: "whaleMouth", build: "pond" },
-  turtle: { body: "#8FBF6A", belly: "#E5F0D5", extra: "shell", build: "pond" },
-  octopus: { body: "#D98AC2", belly: "#F7E4F0", extra: "tentacles", build: "pond" },
-  crab: { body: "#E86A5C", belly: "#F9DAD5", extra: "claws", build: "pond" },
-  // ── Растения в горшочках ──
-  cactus: { body: "#5FA052", build: "plant" },
-  bonsai: { body: "#6FBF4E", belly: "#CB7B4E", build: "plant" },
-  succulent: { body: "#9BC98F", belly: "#CB7B4E", build: "plant" },
-  sunflower: { body: "#FFC800", belly: "#CB7B4E", build: "plant" },
-  clover: { body: "#5FA052", belly: "#CB7B4E", build: "plant" },
-  sprout: { body: "#7FC45C", belly: "#CB7B4E", build: "plant" },
+  seal: { body: "#B8C9D9", belly: "#E8EFF5" },
+  whale: { body: "#5FA8D3", belly: "#DCEFF9" },
+  turtle: { body: "#8FBF6A", belly: "#E5F0D5" },
+  octopus: { body: "#D98AC2", belly: "#F7E4F0" },
+  crab: { body: "#E86A5C", belly: "#F9DAD5" },
+  // ── Растения на грядке ──
+  cactus: { body: "#5FA052" },
+  bonsai: { body: "#6FBF4E" },
+  succulent: { body: "#9BC98F" },
+  sunflower: { body: "#FFC800" },
+  clover: { body: "#5FA052" },
+  sprout: { body: "#7FC45C" },
 };
 
 export function speciesStyle(type: PetType): SpeciesStyle {
@@ -399,7 +368,7 @@ export function speciesStyle(type: PetType): SpeciesStyle {
 
 export interface WardrobeItem {
   id: string;
-  slot: "hat" | "neck" | "face" | "skin";
+  slot: "hat" | "neck" | "face";
   title: string;
   emoji: string;
   price: number;
@@ -414,16 +383,17 @@ export const WARDROBE_CATALOG: WardrobeItem[] = [
   { id: "bow", slot: "neck", title: "Бантик", emoji: "🎀", price: 90, subtitle: "Мило и нарядно" },
   { id: "glasses", slot: "face", title: "Очки", emoji: "👓", price: 150, subtitle: "Умный взгляд" },
   { id: "shades", slot: "face", title: "Тёмные очки", emoji: "🕶️", price: 200, subtitle: "Звезда лужайки" },
-  { id: "golden", slot: "skin", title: "Золотой окрас", emoji: "🌟", price: 500, subtitle: "Сияет как монетка" },
-  { id: "mint", slot: "skin", title: "Мятный окрас", emoji: "🌿", price: 300, subtitle: "Свежесть после дождя" },
-  { id: "rose", slot: "skin", title: "Розовый окрас", emoji: "🌸", price: 300, subtitle: "Нежность и доброта" },
+  // v2.1.0: окрасы заменены новыми аксессуарами (спрайт реалистичного
+  // зверя нельзя перекрасить; купленные окрасы вернулись монетками).
+  { id: "bandana", slot: "neck", title: "Бандана", emoji: "🔵", price: 450, subtitle: "Стиль настоящего путешественника" },
+  { id: "bell", slot: "neck", title: "Колокольчик", emoji: "🔔", price: 300, subtitle: "Звенит от каждого шага" },
+  { id: "flowerPin", slot: "hat", title: "Цветочек", emoji: "🌸", price: 280, subtitle: "Весенняя нежность" },
 ];
 
 export const SLOT_TITLES: Record<string, string> = {
   hat: "Головные уборы",
   neck: "Шея",
   face: "Лицо",
-  skin: "Окрасы",
 };
 
 /** hex → rgb-компоненты. */
@@ -448,28 +418,109 @@ export function mixColors(base: string, overlay: string, alpha: number): string 
   return `#${toHex(m(r1, r2))}${toHex(m(g1, g2))}${toHex(m(b1, b2))}`;
 }
 
-/** Окрас-скин (v1.9.0): подкрашиваем основной цвет тела. */
-export function skinnedBodyColor(type: PetType, skin?: string): string {
-  const base = speciesStyle(type).body;
-  switch (skin) {
-    case "golden":
-      return mixColors(base, "#FFC800", 0.55);
-    case "mint":
-      return mixColors(base, "#62D9B8", 0.55);
-    case "rose":
-      return mixColors(base, "#FF8FB1", 0.55);
-    default:
-      return base;
-  }
+// ── Спрайтовая система v2.1.0 «Настоящие звери» ─────────────────────
+// Зеркало lib/data/sprite_meta.dart: размеры видов, якоря аксессуаров,
+// геометрия сцены. Питомцы — реалистичные иллюстрации /sprites/<вид>.webp.
+
+/** Высота взрослого питомца как доля высоты сцены (240). */
+export interface SpriteMeta {
+  h: number;
+  sleep: boolean;
 }
 
-/** Животик с учётом окраса. */
-export function skinnedBellyColor(type: PetType, skin?: string): string {
-  if (!skin || skin === "classic") return bellyColor(type);
-  return mixColors(skinnedBodyColor(type, skin), "#FFFFFF", 0.65);
+export const SPRITE_META: Record<PetType, SpriteMeta> = {
+  fox: { h: 0.165, sleep: true },
+  cat: { h: 0.15, sleep: true },
+  dragon: { h: 0.19, sleep: true },
+  bunny: { h: 0.15, sleep: true },
+  hedgehog: { h: 0.125, sleep: true },
+  panda: { h: 0.18, sleep: true },
+  bear: { h: 0.185, sleep: true },
+  dog: { h: 0.17, sleep: true },
+  deer: { h: 0.215, sleep: true },
+  squirrel: { h: 0.15, sleep: true },
+  raccoon: { h: 0.155, sleep: true },
+  koala: { h: 0.155, sleep: true },
+  pig: { h: 0.16, sleep: true },
+  unicorn: { h: 0.215, sleep: true },
+  owl: { h: 0.165, sleep: true },
+  duck: { h: 0.13, sleep: true },
+  chick: { h: 0.105, sleep: true },
+  penguin: { h: 0.155, sleep: true },
+  frog: { h: 0.095, sleep: true },
+  seal: { h: 0.115, sleep: true },
+  whale: { h: 0.125, sleep: true },
+  turtle: { h: 0.085, sleep: true },
+  octopus: { h: 0.13, sleep: true },
+  crab: { h: 0.075, sleep: true },
+  cactus: { h: 0.155, sleep: false },
+  bonsai: { h: 0.2, sleep: false },
+  succulent: { h: 0.115, sleep: false },
+  sunflower: { h: 0.205, sleep: false },
+  clover: { h: 0.115, sleep: false },
+  sprout: { h: 0.12, sleep: false },
+};
+
+export { spriteAspect } from "./sprite_sizes";
+
+/** Путь к спрайту вида (sleep — поза сна). */
+export function spriteAsset(type: PetType, sleep = false): string {
+  const m = SPRITE_META[type];
+  const useSleep = sleep && m?.sleep;
+  return `/sprites/${type}${useSleep ? "_sleep" : ""}.webp`;
 }
 
-/** Затемнённая версия окраса (дальние лапы, тени). */
-export function skinnedShadeColor(type: PetType, skin?: string): string {
-  return mixColors(skinnedBodyColor(type, skin), "#000000", 0.18);
+/** Стадии меняют только размер: малыш 55%, подросток 78%, взрослый 100%. */
+export function spriteStageScale(stage: number): number {
+  return [0.55, 0.78, 1, 1][Math.max(0, Math.min(3, stage))];
+}
+
+/** Прыгуны: во время прогулки перескакивают, а не идут. */
+export const HOP_PETS: PetType[] = ["bunny", "frog"];
+
+/** Якоря аксессуаров и морды — в долях прямоугольника спрайта
+ *  (спрайт смотрит вправо: x растёт к морде, y — вниз от верха). */
+export interface Anchors {
+  hat: [number, number];
+  neck: [number, number];
+  eye: [number, number];
+  mouth: [number, number];
+}
+
+const ANCHORS_QUAD: Anchors = { hat: [0.665, 0.085], neck: [0.585, 0.36], eye: [0.705, 0.215], mouth: [0.88, 0.33] };
+const ANCHORS_BIRD: Anchors = { hat: [0.51, 0.075], neck: [0.455, 0.42], eye: [0.575, 0.24], mouth: [0.76, 0.29] };
+const ANCHORS_HOP: Anchors = { hat: [0.66, 0.09], neck: [0.57, 0.4], eye: [0.71, 0.24], mouth: [0.86, 0.36] };
+const ANCHORS_POND: Anchors = { hat: [0.48, 0.09], neck: [0.42, 0.42], eye: [0.56, 0.26], mouth: [0.83, 0.52] };
+const ANCHORS_PLANT: Anchors = { hat: [0.5, 0.06], neck: [0.5, 0.34], eye: [0.56, 0.22], mouth: [0.5, 0.1] };
+
+export function anchorsFor(type: PetType): Anchors {
+  if (isPlant(type)) return ANCHORS_PLANT;
+  if (isAquatic(type)) return ANCHORS_POND;
+  if (HOP_PETS.includes(type)) return ANCHORS_HOP;
+  const birdLike: PetType[] = ["owl", "duck", "chick", "penguin"];
+  return birdLike.includes(type) ? ANCHORS_BIRD : ANCHORS_QUAD;
+}
+
+/** Геометрия сцены (зеркало SceneGeom): доли ширины 400 / высоты 240. */
+export const GEOM = {
+  groundYF: 0.74,
+  pondCXF: 0.62,
+  pondCYF: 0.765,
+  pondRWF: 0.21,
+  pondRHF: 0.058,
+  bedX0F: 0.045,
+  bedX1F: 0.335,
+  bedYF: 0.845,
+} as const;
+
+/** Полосы прогулки зверей: y-линия и масштаб глубины.
+ *  Все полосы НИЖЕ пруда — звери проходят перед ним, а не по воде. */
+export function laneYs(n: number): number[] {
+  if (n <= 1) return [0.935];
+  return Array.from({ length: n }, (_, i) => 0.915 + (0.0675 * i) / (n - 1));
+}
+
+export function laneScales(n: number): number[] {
+  if (n <= 1) return [1.05];
+  return Array.from({ length: n }, (_, i) => 0.9 + (0.2 * i) / (n - 1));
 }

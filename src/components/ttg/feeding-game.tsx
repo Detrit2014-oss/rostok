@@ -1,8 +1,9 @@
 "use client";
 
-// Порт lib/screens/feeding_game_screen.dart (v1.6.0): питомец СИДИТ
-// на задних лапах и ЛОВИТ ЕДУ РТОМ; кит — лицом к экрану. Вся еда
-// цветная (без прозрачных квадратов). Награда: 2 XP и 1 монетка за еду.
+// Порт lib/screens/feeding_game_screen.dart (v2.1.0): настоящий зверь
+// (реалистичный спрайт) стоит по центру, еда летит в ЯКОРЬ МОРДЫ,
+// питомец довольно пружинит («жуёт»). Водные плавают в пруду, растения
+// ловят бутоном. Вся еда цветная. Награда: 2 XP и 1 монетка за еду.
 
 import { useEffect, useRef, useState } from "react";
 import { useTTG } from "@/lib/ttg/store";
@@ -11,10 +12,12 @@ import {
   isAquatic,
   isPlant,
   petStage,
-  speciesStyle,
+  anchorsFor,
+  spriteAsset,
+  spriteAspect,
+  spriteStageScale,
 } from "@/lib/ttg/types";
-import type { Pet, PetType } from "@/lib/ttg/types";
-import { bellyColor, bodyColor } from "@/lib/ttg/types";
+import type { Pet } from "@/lib/ttg/types";
 import { BigButton, Coin } from "./widgets";
 import { X } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +32,8 @@ interface Food {
   spawnMs: number;
   speed: number; // высоты экрана в секунду
   flying?: boolean;
+  flyFrom?: { x: number; y: number };
+  flyAt?: number;
 }
 
 type Phase = "menu" | "playing" | "finished";
@@ -78,7 +83,7 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
           {
             id: ++idRef.current,
             kind: Math.floor(Math.random() * 5),
-            x: 0.12 + Math.random() * 0.76,
+            x: 0.40 + Math.random() * 0.20,
             spawnMs: el,
             speed: 0.28 + Math.random() * 0.16,
           },
@@ -114,10 +119,10 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
     []
   );
 
-  const catchFood = (f: Food) => {
+  const catchFood = (f: Food, from: { x: number; y: number }) => {
     if (f.flying) return;
     foodsRef.current = foodsRef.current.map((x) =>
-      x.id === f.id ? { ...x, flying: true } : x
+      x.id === f.id ? { ...x, flying: true, flyFrom: from, flyAt: performance.now() } : x
     );
     setFoods([...foodsRef.current]);
     setMouthOpen(1);
@@ -133,22 +138,41 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
   const onTap = (e: React.MouseEvent<SVGSVGElement>) => {
     if (phase !== "playing") return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * 400;
-    const py = ((e.clientY - rect.top) / rect.height) * 240;
+    // preserveAspectRatio="slice": учитываем реальную видимую область.
+    const scale = Math.max(rect.width / 400, rect.height / 240);
+    const offX = (400 - rect.width / scale) / 2;
+    const offY = (240 - rect.height / scale) / 2;
+    const px = offX + (e.clientX - rect.left) / scale;
+    const py = offY + (e.clientY - rect.top) / scale;
     const el = performance.now() - startRef.current;
     for (const f of [...foodsRef.current].reverse()) {
       if (f.flying) continue;
       const t = (el - f.spawnMs) / 1000;
       const fx = f.x * 400;
       const fy = 240 * 0.12 + 240 * f.speed * t;
-      if (Math.hypot(fx - px, fy - py) <= 26) {
-        catchFood(f);
+      if (Math.hypot(fx - px, fy - py) <= 30) {
+        catchFood(f, { x: fx, y: fy });
         return;
       }
     }
   };
 
   const el = phase === "playing" ? performance.now() - startRef.current : 0;
+
+  // Прямоугольник спрайта питомца и точка рта (зеркало Flutter-версии).
+  const stage = pet ? petStage(pet) : 3;
+  const aspect = pet ? spriteAspect(pet.type) : 1.45;
+  let boxH = 240 * 0.38 * spriteStageScale(stage);
+  let boxW = boxH * aspect;
+  if (boxW > 400 * 0.74) {
+    boxW = 400 * 0.74;
+    boxH = boxW / aspect;
+  }
+  const boxX = 200 - boxW / 2;
+  const boxY = 240 * 0.82 - boxH;
+  const mouthAnchors = pet ? anchorsFor(pet.type) : anchorsFor("fox");
+  const mouthX = boxX + mouthAnchors.mouth[0] * boxW;
+  const mouthY = boxY + mouthAnchors.mouth[1] * boxH;
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col" style={{ background: C.bg }}>
@@ -189,26 +213,54 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
           </defs>
           <rect x="0" y="0" width="400" height="240" fill="url(#fg-sky)" />
           <rect x="0" y={240 * 0.8} width="400" height={240 * 0.2} fill="#90D26D" />
-          {aquatic && <ellipse cx="200" cy="187" rx="172" ry="24" fill="#6EC1E4" />}
-
-          {pet && phase !== "menu" && (
-            <g transform="translate(200 0)">
-              {aquatic ? (
-                <WhaleFront mouthOpen={mouthOpen} type={pet.type} />
-              ) : plant ? (
-                <SittingPlant mouthOpen={mouthOpen} type={pet.type} />
-              ) : (
-                <SittingPet mouthOpen={mouthOpen} type={pet.type} />
-              )}
+          {aquatic && (
+            <g>
+              <ellipse cx="200" cy={240 * 0.8} rx="184" ry="27" fill="#E8D8A8" />
+              <ellipse cx="200" cy={240 * 0.8} rx="172" ry="24" fill="#6EC1E4" />
             </g>
           )}
 
-          {/* Еда — всегда цветная */}
+          {pet && stage > 0 && (
+            <g>
+              <ellipse
+                cx={200}
+                cy={240 * 0.82 + 2}
+                rx={boxW * 0.3}
+                ry={boxW * 0.045}
+                fill="#2E7D32"
+                opacity={aquatic ? 0 : 0.18}
+              />
+              {aquatic && (
+                <ellipse cx={200} cy={240 * 0.8} rx="172" ry="24" fill="#6EC1E4" opacity="0.45" />
+              )}
+              <g
+                className={mouthOpen > 0 ? "ttg-chew" : undefined}
+                style={{ transformBox: "fill-box", transformOrigin: "50% 100%" }}
+              >
+                <image
+                  href={spriteAsset(pet.type)}
+                  x={boxX}
+                  y={boxY}
+                  width={boxW}
+                  height={boxH}
+                  preserveAspectRatio="none"
+                />
+              </g>
+            </g>
+          )}
+
+          {/* Еда — всегда цветная; летит в якорь морды */}
           {phase === "playing" &&
             foods.map((f) => {
               const t = (el - f.spawnMs) / 1000;
-              const cx = f.x * 400;
-              const cy = f.flying ? lerpTo(f) : 240 * 0.12 + 240 * f.speed * t;
+              let cx = f.x * 400;
+              let cy = 240 * 0.12 + 240 * f.speed * t;
+              if (f.flying && f.flyFrom && f.flyAt) {
+                const ft = Math.min(1, (performance.now() - f.flyAt) / 200);
+                const ease = ft * ft * (3 - 2 * ft);
+                cx = f.flyFrom.x + (mouthX - f.flyFrom.x) * ease;
+                cy = f.flyFrom.y + (mouthY - f.flyFrom.y) * ease;
+              }
               return <FoodShape key={f.id} kind={f.kind} x={cx} y={cy} />;
             })}
         </svg>
@@ -258,181 +310,8 @@ export function FeedingGame({ onClose }: { onClose: () => void }) {
     </div>
   );
 
-  function lerpTo(f: Food): number {
-    // Полёт в рот — визуально сжимаем координату Y к точке рта.
-    return 240 * 0.52;
-  }
 }
 
-/** Открытый рот: тёмная пасть с язычком. */
-function Mouth({ x, y, r, belly }: { x: number; y: number; r: number; belly: string }) {
-  const rr = Math.max(6, Math.min(60, r));
-  return (
-    <g>
-      <circle cx={x} cy={y} r={rr} fill="#7E3A47" />
-      <circle cx={x} cy={y + rr * 0.35} r={rr * 0.55} fill="#E88A9A" />
-      <circle cx={x} cy={y} r={rr * 1.06} fill="none" stroke={belly} strokeOpacity="0.7" strokeWidth="3" />
-    </g>
-  );
-}
-
-/** Питомец СИДИТ на задних лапах (v1.8.0). */
-function SittingPet({ type, mouthOpen }: { type: PetType; mouthOpen: number }) {
-  const st = speciesStyle(type);
-  const body = bodyColor(type);
-  const belly = bellyColor(type);
-  const groundY = 240 * 0.8;
-  const bodyW = 110;
-  const bodyH = 118;
-  const bodyCy = groundY - bodyH * 0.52;
-  const headR = bodyW * 0.42;
-  const headCy = bodyCy - bodyH * 0.62;
-
-  return (
-    <g>
-      {/* Хвост за телом */}
-      {(st.tail === "bushy" || st.tail === "thin" || st.tail === "curl") && (
-        <ellipse
-          cx={bodyW * 0.58}
-          cy={bodyCy + bodyH * (st.tail === "bushy" ? 0.18 : 0.3)}
-          rx={bodyW * (st.tail === "bushy" ? 0.25 : 0.11)}
-          ry={bodyH * (st.tail === "bushy" ? 0.36 : 0.17)}
-          fill={body}
-        />
-      )}
-
-      {/* Бёдра и ступни — сидит на задних лапах */}
-      <circle cx={-bodyW * 0.38} cy={bodyCy + bodyH * 0.32} r={bodyW * 0.24} fill={body} />
-      <circle cx={bodyW * 0.38} cy={bodyCy + bodyH * 0.32} r={bodyW * 0.24} fill={body} />
-      {[-0.34, 0.34].map((sx) => (
-        <g key={sx}>
-          <ellipse cx={sx * bodyW} cy={groundY - 6} rx={17} ry={9} fill={body} />
-          {[-1, 0, 1].map((t) => (
-            <circle key={t} cx={sx * bodyW + t * 8} cy={groundY - 4} r={2.6} fill={belly} />
-          ))}
-        </g>
-      ))}
-
-      {/* Тело и животик */}
-      <ellipse cx={0} cy={bodyCy} rx={bodyW / 2} ry={bodyH / 2} fill={body} />
-      <ellipse cx={0} cy={bodyCy + bodyH * 0.14} rx={bodyW * 0.28} ry={bodyH * 0.25} fill={belly} />
-
-      {/* Передние лапки на животике */}
-      {[-0.16, 0.16].map((sx) => (
-        <ellipse key={sx} cx={sx * bodyW} cy={bodyCy + bodyH * 0.3} rx={11} ry={7} fill={body} />
-      ))}
-
-      {/* Уши */}
-      {(st.ear === "triangle") &&
-        [-1, 1].map((sx) => (
-          <path
-            key={sx}
-            d={`M ${sx * headR * 0.75} ${headCy - headR * 0.35} L ${sx * headR * 0.5} ${headCy - headR * 1.25} L ${sx * headR * 0.15} ${headCy - headR * 0.7} Z`}
-            fill={body}
-          />
-        ))}
-      {(st.ear === "round" || st.ear === "pom") &&
-        [-1, 1].map((sx) => (
-          <circle key={sx} cx={sx * headR * 0.72} cy={headCy - headR * 0.7} r={headR * 0.34} fill={body} />
-        ))}
-      {st.ear === "long" &&
-        [-1, 1].map((sx) => (
-          <rect
-            key={sx}
-            x={sx * headR * 0.42 - headR * 0.2}
-            y={headCy - headR * 2}
-            width={headR * 0.4}
-            height={headR * 1.5}
-            rx={headR * 0.2}
-            fill={body}
-          />
-        ))}
-      {st.ear === "horns" &&
-        [-1, 1].map((sx) => (
-          <circle key={sx} cx={sx * headR * 0.4} cy={headCy - headR * 0.85} r={headR * 0.14} fill="#F6E7C1" />
-        ))}
-      {st.ear === "tuft" && <circle cx={0} cy={headCy - headR} r={headR * 0.18} fill={body} />}
-
-      {/* Голова */}
-      <circle cx={0} cy={headCy} r={headR} fill={body} />
-
-      {/* Очки панды / маска енота */}
-      {st.extra === "patches" &&
-        [-0.42, 0.42].map((sx) => (
-          <ellipse key={sx} cx={sx * headR} cy={headCy - headR * 0.05} rx={headR * 0.3} ry={headR * 0.34} fill={DARK} />
-        ))}
-      {st.extra === "mask" &&
-        [-0.42, 0.42].map((sx) => (
-          <ellipse key={sx} cx={sx * headR} cy={headCy - headR * 0.05} rx={headR * 0.34} ry={headR * 0.3} fill="#5A5F66" />
-        ))}
-
-      {/* Глаза */}
-      {[-0.42, 0.42].map((sx) => (
-        <g key={sx}>
-          <circle cx={sx * headR} cy={headCy - headR * 0.05} r={headR * 0.2} fill="#FFFFFF" />
-          <circle cx={sx * headR + 1} cy={headCy - headR * 0.05 + 1} r={headR * 0.1} fill="#33261A" />
-        </g>
-      ))}
-      {/* Румянец */}
-      {[-0.72, 0.72].map((sx) => (
-        <circle key={sx} cx={sx * headR} cy={headCy + headR * 0.18} r={headR * 0.14} fill="#FF8FA3" opacity="0.55" />
-      ))}
-
-      {/* РОТ — открыт, ловит еду */}
-      <Mouth x={0} y={headCy + headR * 0.45} r={headR * (0.3 + 0.5 * mouthOpen)} belly={belly} />
-    </g>
-  );
-}
-
-/** Кит и водные — ЛИЦОМ К ЭКРАНУ (v1.8.0). */
-function WhaleFront({ type, mouthOpen }: { type: PetType; mouthOpen: number }) {
-  const body = bodyColor(type);
-  const belly = bellyColor(type);
-  const cy = 240 * 0.56;
-  const r = 58;
-
-  return (
-    <g>
-      {/* Боковые плавники */}
-      {[-1.05, 1.05].map((sx) => (
-        <ellipse key={sx} cx={sx * r} cy={cy} rx={r * 0.25} ry={r * 0.45} fill={body} opacity="0.85" />
-      ))}
-      {/* Тело — камера смотрит киту в лицо */}
-      <circle cx={0} cy={cy} r={r} fill={body} />
-      <ellipse cx={0} cy={cy + r * 0.45} rx={r * 0.75} ry={r * 0.45} fill={belly} />
-      {/* Глаза */}
-      {[-0.45, 0.45].map((sx) => (
-        <g key={sx}>
-          <circle cx={sx * r} cy={cy - r * 0.3} r={r * 0.16} fill="#FFFFFF" />
-          <circle cx={sx * r + 1} cy={cy - r * 0.3 + 1} r={r * 0.08} fill="#33261A" />
-        </g>
-      ))}
-      {/* Фонтанчик */}
-      <circle cx={0} cy={cy - r * 0.75} r={r * 0.08} fill="#3E6E8E" />
-      {/* БОЛЬШОЙ РОТ */}
-      <Mouth x={0} y={cy + r * 0.32} r={r * (0.34 + 0.42 * mouthOpen)} belly={belly} />
-    </g>
-  );
-}
-
-/** Растение «ловит» верхушкой (распахнутый бутон). */
-function SittingPlant({ type, mouthOpen }: { type: PetType; mouthOpen: number }) {
-  const body = bodyColor(type);
-  const groundY = 240 * 0.8;
-  const topY = groundY - 58;
-  return (
-    <g>
-      <path d={`M -34 ${groundY - 52} L 34 ${groundY - 52} L 26 ${groundY - 4} L -26 ${groundY - 4} Z`} fill="#CB7B4E" />
-      <rect x={-37} y={groundY - 58} width={74} height={10} fill="#A85F38" />
-      <rect x={-3} y={topY - 44} width={6} height={44} fill="#5FA052" />
-      <path d={`M 0 ${topY - 40} Q -36 ${topY - 48} -30 ${topY - 74} Q -8 ${topY - 56} 0 ${topY - 40} Z`} fill={body} />
-      <path d={`M 0 ${topY - 40} Q 36 ${topY - 48} 30 ${topY - 74} Q 8 ${topY - 56} 0 ${topY - 40} Z`} fill={body} opacity="0.88" />
-      <Mouth x={0} y={topY - 46} r={14 + 12 * mouthOpen} belly={body} />
-    </g>
-  );
-}
-
-/** Еда — всё рисуется явными цветами (фикс «прозрачного квадрата»). */
 function FoodShape({ kind, x, y }: { kind: number; x: number; y: number }) {
   return (
     <g transform={`translate(${x} ${y}) rotate(${Math.sin((y / 240) * 6.3) * 9})`}>

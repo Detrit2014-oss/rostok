@@ -33,16 +33,15 @@ class ShopScreen extends StatelessWidget {
     _WardrobeItem('bow', 'neck', 'Бантик', '🎀', 90, 'Мило и нарядно'),
     _WardrobeItem('glasses', 'face', 'Очки', '👓', 150, 'Умный взгляд'),
     _WardrobeItem('shades', 'face', 'Тёмные очки', '🕶️', 200, 'Звезда лужайки'),
-    _WardrobeItem('golden', 'skin', 'Золотой окрас', '🌟', 500, 'Сияет как монетка'),
-    _WardrobeItem('mint', 'skin', 'Мятный окрас', '🌿', 300, 'Свежесть после дождя'),
-    _WardrobeItem('rose', 'skin', 'Розовый окрас', '🌸', 300, 'Нежность и доброта'),
+    _WardrobeItem('bandana', 'neck', 'Бандана', '🔵', 450, 'Стиль настоящего путешественника'),
+    _WardrobeItem('bell', 'neck', 'Колокольчик', '🔔', 300, 'Звенит от каждого шага'),
+    _WardrobeItem('flowerPin', 'hat', 'Цветочек', '🌸', 280, 'Весенняя нежность'),
   ];
 
   static const Map<String, String> _slotTitles = <String, String>{
     'hat': 'Головные уборы',
     'neck': 'Шея',
     'face': 'Лицо',
-    'skin': 'Окрасы',
   };
 
   void _buyFrame(BuildContext context, Pet pet, _FrameItem f) {
@@ -276,7 +275,7 @@ class ShopScreen extends StatelessWidget {
 
   Widget _buildWardrobeSection(
       BuildContext context, PetService petService, Pet active) {
-    final List<String> slots = <String>['hat', 'neck', 'face', 'skin'];
+    final List<String> slots = <String>['hat', 'neck', 'face'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -300,7 +299,6 @@ class ShopScreen extends StatelessWidget {
               'hat' => active.hat == w.id,
               'neck' => active.neck == w.id,
               'face' => active.face == w.id,
-              'skin' => active.skin == w.id,
               _ => false,
             };
             return InfoCard(

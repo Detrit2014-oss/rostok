@@ -96,6 +96,7 @@ class PetService extends ChangeNotifier {
     _weekKey = _storage.getString(_kWeekKey);
 
     _migrateGrowthV19();
+    _migrateWardrobeV21();
     _rollDateCounters();
     // С v1.1.0 первого питомца НЕ создаём автоматически:
     // при пустой коллекции приложение показывает большой экран
@@ -132,6 +133,37 @@ class PetService extends ChangeNotifier {
       if (p.growthMinutes > 0) p.growthMinutes *= 20;
     }
     _storage.setBool(_kGrowthMigrate, true);
+    _persistPets();
+  }
+
+  static const String _kWardrobeMigrate = 'migrate_wardrobe_v21';
+
+  /// v2.1.0: окрасы-скины заменены новыми аксессуарами (бандана,
+  /// колокольчик, цветочек) — спрайт реалистичного зверя нельзя
+  /// перекрасить. Купленные окрасы возвращаются монетками.
+  void _migrateWardrobeV21() {
+    if (_storage.getBool(_kWardrobeMigrate)) return;
+    const Map<String, int> skinPrices = <String, int>{
+      'golden': 500,
+      'mint': 300,
+      'rose': 300,
+    };
+    int refund = 0;
+    wardrobe.removeWhere((String id) {
+      final int? price = skinPrices[id];
+      if (price == null) return false;
+      refund += price;
+      return true;
+    });
+    if (refund > 0) {
+      coins += refund;
+      _storage.setInt(_kCoins, coins);
+      _storage.setString(_kWardrobe, _storage.encodeJson(wardrobe));
+    }
+    for (final Pet p in pets) {
+      p.skin = 'classic';
+    }
+    _storage.setBool(_kWardrobeMigrate, true);
     _persistPets();
   }
 
@@ -280,7 +312,7 @@ class PetService extends ChangeNotifier {
     return true;
   }
 
-  /// Надеть/снять предмет на питомца. Слот: hat|neck|face|skin.
+  /// Надеть/снять предмет на питомца. Слот: hat|neck|face.
   void equipItem(Pet pet, String slot, String itemId) {
     switch (slot) {
       case 'hat':
@@ -291,9 +323,6 @@ class PetService extends ChangeNotifier {
         break;
       case 'face':
         pet.face = pet.face == itemId ? 'none' : itemId;
-        break;
-      case 'skin':
-        pet.skin = pet.skin == itemId ? 'classic' : itemId;
         break;
     }
     _persistPets();

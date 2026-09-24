@@ -116,15 +116,15 @@ for rel in required:
         errors.append(f'отсутствует обязательный файл: {rel}')
 
 vj = json.loads((ROOT / 'update/version.json').read_text(encoding='utf-8'))
-if vj.get('latest_version') != '2.0.0':
-    errors.append('version.json: latest_version != 2.0.0')
+if vj.get('latest_version') != '2.1.0':
+    errors.append('version.json: latest_version != 2.1.0')
 
 pubspec = (ROOT / 'pubspec.yaml').read_text(encoding='utf-8')
-if 'version: 2.0.0+11' not in pubspec:
-    errors.append('pubspec.yaml: версия не 2.0.0+11')
+if 'version: 2.1.0+12' not in pubspec:
+    errors.append('pubspec.yaml: версия не 2.1.0+12')
 
 appv = (ROOT / 'lib/core/app_version.dart').read_text(encoding='utf-8')
-if "kAppVersion = '2.0.0'" not in appv:
+if "kAppVersion = '2.1.0'" not in appv:
     errors.append('app_version.dart: версия не синхронизирована')
 
 # ── Итог ─────────────────────────────────────────────────────────────

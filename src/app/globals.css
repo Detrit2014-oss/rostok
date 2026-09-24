@@ -262,3 +262,24 @@
 .ttg-sway {
   animation: ttg-sway 3.4s ease-in-out infinite;
 }
+
+/* v2.1.0: фонтанчик кита — струйка и капли поднимаются и тают. */
+@keyframes ttg-fountain {
+  0% { opacity: 0; transform: translateY(4px); }
+  8% { opacity: 0.9; transform: translateY(0); }
+  18% { opacity: 0.9; transform: translateY(-2px); }
+  100% { opacity: 0; transform: translateY(2px); }
+}
+.ttg-fountain {
+  animation: ttg-fountain 7s ease-out infinite;
+}
+
+/* v2.1.0: питомец «жуёт» в мини-игре — пружинка у земли. */
+@keyframes ttg-chew {
+  0%, 100% { transform: scale(1, 1); }
+  30% { transform: scale(1.05, 0.94); }
+  60% { transform: scale(0.98, 1.03); }
+}
+.ttg-chew {
+  animation: ttg-chew 0.42s ease-in-out 2;
+}
