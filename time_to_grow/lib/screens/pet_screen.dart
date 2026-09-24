@@ -8,6 +8,7 @@ import '../services/pet_service.dart';
 import '../widgets/common.dart';
 import '../widgets/pet_canvas.dart';
 import 'pet_selection_screen.dart';
+import 'feeding_game_screen.dart';
 import 'shop_screen.dart';
 
 /// Главный экран: сцена с питомцем + управление сессией детокса.
@@ -32,6 +33,14 @@ class PetScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Росток'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Покормить питомца',
+            icon: const Icon(Icons.restaurant_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                  builder: (_) => const FeedingGameScreen()),
+            ),
+          ),
           IconButton(
             tooltip: 'Магазин',
             icon: const Icon(Icons.storefront_rounded),

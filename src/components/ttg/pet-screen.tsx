@@ -17,7 +17,8 @@ import { formatTimer } from "@/lib/ttg/format";
 import { PetScene } from "./scene";
 import { BigButton, Chip, InfoCard, ProgressBar } from "./widgets";
 import { ShopScreen } from "./shop-screen";
-import { CheckCircle2, Clock, Coins, Flame, Pencil, PhoneOff, Snowflake, Store } from "lucide-react";
+import { FeedingGame } from "./feeding-game";
+import { CheckCircle2, Clock, Coins, Flame, Pencil, PhoneOff, Utensils, Snowflake, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
@@ -53,6 +54,7 @@ export function PetScreen() {
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [shopOpen, setShopOpen] = useState(false);
+  const [gameOpen, setGameOpen] = useState(false);
 
   const running = sessionStartedAt !== null;
   const nowMs = useTTG((s) => s.nowMs);
@@ -73,6 +75,7 @@ export function PetScreen() {
       style={{ background: `linear-gradient(180deg, ${C.skyTop}, ${C.skyBottom})` }}
     >
       {shopOpen && <ShopScreen onClose={() => setShopOpen(false)} />}
+      {gameOpen && <FeedingGame onClose={() => setGameOpen(false)} />}
       {/* Чипы статистики */}
       <div className="flex flex-wrap gap-2 px-4 pt-2">
         <Chip icon={Clock} text={`Сегодня: ${todayMinutes} мин`} />
@@ -204,6 +207,17 @@ export function PetScreen() {
                 onClick={() => startSession()}
               />
             </div>
+            {active && (
+              <button
+                type="button"
+                onClick={() => setGameOpen(true)}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-[16px] border-2 py-3 text-[14px] font-extrabold transition-transform active:scale-[0.98]"
+                style={{ borderColor: C.orange, color: C.orange, backgroundColor: "#FFF4E8" }}
+              >
+                <Utensils size={18} />
+                Покормить питомца (мини-игра)
+              </button>
+            )}
             <p
               className="pt-2 text-center text-[11.5px] leading-snug"
               style={{ color: C.inkSoft }}
