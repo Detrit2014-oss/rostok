@@ -98,3 +98,24 @@ Stage Summary:
 - Локальный git полностью готов к push на GitHub (тег v1.2.0 поставлен).
 - Выявлена потеря v1.3.0–v1.7.0: восстановление — либо zip от пользователя (rostok_v1.7.0.zip и новее, если сохранил локально), либо пересборка по детальным спецификациям из сводки сессий.
 - После настройки remote: правило — коммит+push после каждого релиза.
+
+---
+Task ID: 6
+Agent: main
+Task: GitHub-бэкап + восстановление v1.3.0–v1.8.0 (после отката среды к v1.2.0).
+
+Work Log:
+- Push v1.2.0 на https://github.com/Detrit2014-oss/rostok (main + тег v1.2.0, remote с PAT).
+- Batch1 (restore v1.4.0-v1.5.0): переименование «Время Расти»→«Росток» везде; 30 видов (24 зверя + 6 растений: кактус, бонсай, суккулент, подсолнух, клевер, росточек); data/species_style.dart + types.ts SPECIES_STYLES; новый pet_canvas.dart и scene.tsx: настоящие лапы с пальцами, лежачий сон, пруд, погодные слои (туман/дождь/снег/гроза/облачность), рамки; фильтры выбора (Все/Звери/Водные/Растения); XP-уровни (kXpLevels) + монеты (1 мин = 1 XP = 1 🪙).
+- Batch2 (v1.5.0): магазин (рамки gold/neon/flower, freeze 200, max 2) Flutter+демо; 23 достижения (models/achievement.dart + achievements.ts, сервис + профиль-грид); XP-бар и монет-чипы на главном.
+- Batch3 (v1.6.0+v1.8.0fix): мини-игра «Покорми питомца» — питомец СИДИТ на задних лапах, ловит еду РТОМ (пасть+язычок), кит ЛИЦОМ К ЭКРАНУ в пруду, растения ловят бутоном; еда цветная (яблоко/рыбка/морковка/мёд/ягоды); награды +2 XP +1 🪙; кнопка на главном + иконка в AppBar.
+- Batch4 (v1.7.0): models/quest.dart (пул 6, dailyQuests по хешу даты, сезоны ×4, kPostcards 10, kXpPerTuckIn=20); QuestService (прогресс по событиям: session_* от PetService-листенера, feed_5, diary_1, tuck_in, shop_1), SleepService, WeatherService (geolocator ^12.0.0 + Open-Meteo, 7 состояний WMO, kIsWeb → погода по дате); карточки заданий/сна/сезона на главном; открытки + «Погода в мире» (Авто/По дате) в профиле; демо: quests.ts (BigInt-хеш = Dart), store v3+migrate, use-weather.ts, globals.css keyframes (ttg-fog-drift, ttg-lightning-flash, ttg-rain, ttg-snow).
+- Batch5 (release v1.8.0+9): pubspec/app_version/update version.json → 1.8.0, demo public/version.json → 1.9.0, CHANGELOG 1.4.0–1.8.0, README v1.8.0, docs/WEATHER.md, download+public rostok_v1.8.0.zip (51 файл, 112 КБ), чек-скрипт → 1.8.0.
+- Проверки: check_flutter_project.py OK (40 dart), tsc чисто (только старые examples/skills), eslint чисто, scripts/check-quest-hash.mjs — хеш TS == Dart.
+- E2E agent-browser: 30 карточек с фильтрами; кит → яйцо плавает в пруду, снег по дате; мини-игра: кит лицом к экрану с пастью, ловля еды кликом (SCORE=1), награда +2 XP +1 🪙; задания дня (feed 1/5); профиль: ачивки 3/23, открытки 1/10, погода ❄️ Снег, версия 1.8.0(9). localStorage сброшен. Скриншоты verify-801..806.
+- Фикс по ходу E2E: спавн еды в демо-мини-игре шёл только в ref — добавлен setFoods.
+
+Stage Summary:
+- Репозиторий github.com/Detrit2014-oss/rostok: 11 коммитов, теги v1.2.0 и v1.8.0, рабочее дерево чистое.
+- Росток v1.8.0+9 полностью восстановлен и расширен: все пункты последнего запроса пользователя (сидящий питомец с ловлей ртом, кит лицом к экрану, цветная еда, настоящие лапы, лежачий сон, пруд) + квесты/сон/погода/открытки/сезоны/заморозка.
+- zip в download/ и public/. Правило на будущее: после каждого релиза git commit + git push.
