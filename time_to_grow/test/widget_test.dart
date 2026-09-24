@@ -53,8 +53,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(seconds: 1));
 
-    // Появился главный экран с AppBar «Время Расти».
-    expect(find.text('Время Расти'), findsWidgets);
+    // Появился главный экран с AppBar «Росток».
+    expect(find.text('Росток'), findsWidgets);
     expect(pet.pets.length, 1);
     expect(pet.pets.first.type.name, 'cat');
   });

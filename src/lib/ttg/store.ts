@@ -29,7 +29,7 @@ import { moodAnalyze } from "./moodai";
 import { compareVersions, dayKey, mondayMs, nextVersion, seededRandom, stringHash } from "./format";
 
 export const K_DIARY_SYSTEM_PROMPT =
-  "Ты — тёплый и заботливый ИИ-садовник приложения «Время Расти» " +
+  "Ты — тёплый и заботливый ИИ-садовник приложения «Росток» " +
   "о цифровой гигиене и ментальном здоровье. Пользователь вечером пишет " +
   "короткую заметку о своём дне. Ответь на русском: 2–4 предложения. " +
   "Поддержи человека, мягко отрази его чувства без осуждения и дай одну " +
@@ -48,6 +48,8 @@ interface TTGState {
   todayMinutes: number;
   streakDays: number;
   weekMinutes: number;
+  /** Монетки (v1.5.0) — валюта магазина. */
+  coins: number;
   todayKey: string;
   lastSessionDayKey: string;
   weekKey: string;
@@ -94,6 +96,11 @@ interface TTGState {
   cancelPetChoice: () => void;
   addDetoxMinutes: (minutes: number) => string | null; // возвращает имя, если эволюция
   renamePet: (id: string, name: string) => void;
+  /** Начислить XP активному питомцу (кормление, задания). */
+  addXp: (amount: number) => void;
+  addCoins: (amount: number) => void;
+  /** Купить рамку активному питомцу; false — не хватило монет. */
+  buyFrame: (frameId: string, price: number) => boolean;
   setTimeMachine: (v: boolean) => void;
   addDiaryEntry: (text: string) => DiaryEntry;
   applyLlmReply: (id: string, reply: string) => void;
@@ -118,6 +125,8 @@ function makeEgg(index: number): Pet {
     type: species.type,
     bornAt: Date.now(),
     growthMinutes: 0,
+    xp: 0,
+    frame: "none",
   };
 }
 
@@ -162,6 +171,7 @@ export const useTTG = create<TTGState>()(
       todayMinutes: 0,
       streakDays: 0,
       weekMinutes: 0,
+      coins: 0,
       todayKey: "",
       lastSessionDayKey: "",
       weekKey: "",
@@ -246,6 +256,8 @@ export const useTTG = create<TTGState>()(
           type,
           bornAt: Date.now(),
           growthMinutes: 0,
+          xp: 0,
+          frame: "none",
         };
         set({ pets: [...s.pets, pet], needsPetChoice: false });
       },
@@ -293,6 +305,8 @@ export const useTTG = create<TTGState>()(
         const updatedTarget: Pet = {
           ...target,
           growthMinutes: target.growthMinutes + minutes,
+          // XP-экономика (v1.5.0): 1 минута детокса = 1 XP питомцу.
+          xp: (target.xp ?? 0) + minutes,
         };
         if (!wasAdult && petStage(updatedTarget) >= 3) {
           evolvedName = updatedTarget.name;
@@ -314,6 +328,8 @@ export const useTTG = create<TTGState>()(
           totalMinutes: s.totalMinutes + minutes,
           todayMinutes: s.todayMinutes + minutes,
           weekMinutes: s.weekMinutes + minutes,
+          // Монетки (v1.5.0): 1 минута = 1 монетка.
+          coins: (s.coins ?? 0) + minutes,
           streakDays,
           lastSessionDayKey,
           weekly: s.weekly
@@ -334,6 +350,32 @@ export const useTTG = create<TTGState>()(
         set({
           pets: get().pets.map((p) => (p.id === id ? { ...p, name: clean } : p)),
         });
+      },
+
+      addXp: (amount) => {
+        if (amount <= 0) return;
+        set({
+          pets: get().pets.map((p) =>
+            petStage(p) < 3 ? { ...p, xp: (p.xp ?? 0) + amount } : p
+          ),
+        });
+      },
+
+      addCoins: (amount) =>
+        set({ coins: Math.max(0, (get().coins ?? 0) + amount) }),
+
+      buyFrame: (frameId, price) => {
+        const s = get();
+        if ((s.coins ?? 0) < price) return false;
+        const idx = s.pets.findIndex((p) => petStage(p) < 3);
+        if (idx === -1) return false;
+        set({
+          coins: s.coins - price,
+          pets: s.pets.map((p, i) =>
+            i === idx ? { ...p, frame: frameId } : p
+          ),
+        });
+        return true;
       },
 
       setTimeMachine: (v) => set({ timeMachine: v }),
@@ -475,6 +517,7 @@ export const useTTG = create<TTGState>()(
           todayMinutes: 0,
           streakDays: 0,
           weekMinutes: 0,
+          coins: 0,
           lastSessionDayKey: "",
           sessionStartedAt: null,
           countedSec: 0,
@@ -496,6 +539,7 @@ export const useTTG = create<TTGState>()(
         todayMinutes: s.todayMinutes,
         streakDays: s.streakDays,
         weekMinutes: s.weekMinutes,
+        coins: s.coins,
         todayKey: s.todayKey,
         lastSessionDayKey: s.lastSessionDayKey,
         weekKey: s.weekKey,

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
 import '../data/pet_catalog.dart';
+import '../data/species_style.dart';
 import '../models/pet.dart';
 import '../services/pet_service.dart';
 import '../widgets/common.dart';
@@ -16,8 +17,8 @@ import '../widgets/pet_canvas.dart';
 ///  • при первом запуске (коллекция пуста) — вместо главного экрана;
 ///  • после взросления питомца — по кнопке «Выбрать нового питомца».
 ///
-/// С v1.2.0 — десять видов на прокручиваемой сетке больших живых
-/// карточек + кубик «Случайный питомец» для любителей сюрпризов.
+/// С v1.5.0 — тридцать видов (24 зверя + 6 растений) на прокручиваемой
+/// сетке с фильтрами «Все / Звери / Водные / Растения» + кубик.
 class PetSelectionScreen extends StatefulWidget {
   const PetSelectionScreen({super.key, this.canDismiss = false});
 
@@ -31,6 +32,23 @@ class PetSelectionScreen extends StatefulWidget {
 
 class _PetSelectionScreenState extends State<PetSelectionScreen> {
   PetType? _selected;
+  String _filter = 'all'; // all|beast|water|plant
+
+  List<PetSpecies> get _visibleSpecies {
+    bool keep(PetSpecies s) {
+      switch (_filter) {
+        case 'water':
+          return isAquatic(s.type);
+        case 'plant':
+          return isPlant(s.type);
+        case 'beast':
+          return !isAquatic(s.type) && !isPlant(s.type);
+        default:
+          return true;
+      }
+    }
+    return kPetCatalog.where(keep).toList();
+  }
 
   /// Превью-питомец стадии «Малыш» — показывает, кем станет яйцо.
   Pet _preview(PetType type) => Pet(
@@ -101,6 +119,20 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                   ],
                 ),
               ),
+              // Фильтры по типам (v1.5.0): 30 карточек — нужен поиск глазами.
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: <Widget>[
+                    _chip('all', 'Все ${kPetCatalog.length}'),
+                    _chip('beast', '🦁 Звери'),
+                    _chip('water', '💧 Водные'),
+                    _chip('plant', '🪴 Растения'),
+                  ],
+                ),
+              ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints c) {
@@ -117,7 +149,7 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                           crossAxisSpacing: 14,
                           childAspectRatio: 0.72,
                           children: <Widget>[
-                            for (final PetSpecies s in kPetCatalog)
+                            for (final PetSpecies s in _visibleSpecies)
                               _card(s),
                           ],
                         ),
@@ -160,6 +192,28 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _chip(String id, String label) {
+    final bool active = _filter == id;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: active,
+        onSelected: (_) => setState(() => _filter = id),
+        labelStyle: TextStyle(
+          fontWeight: FontWeight.w800,
+          fontSize: 12.5,
+          color: active ? Colors.white : Palette.inkSoft,
+        ),
+        selectedColor: Palette.green,
+        backgroundColor: Palette.card,
+        side: BorderSide(color: active ? Palette.greenDark : Palette.border),
+        showCheckmark: false,
+        visualDensity: VisualDensity.compact,
       ),
     );
   }

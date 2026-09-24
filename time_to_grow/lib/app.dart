@@ -12,7 +12,7 @@ class TimeToGrowApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Время Расти',
+      title: 'Росток',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       home: const _PetGate(),

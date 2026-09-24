@@ -21,6 +21,10 @@ class PetService extends ChangeNotifier {
   int streakDays = 0;
   int weekMinutes = 0;
 
+  /// Монетки (v1.5.0): капают за сессии, кормление и задания.
+  /// Тратятся в магазине на рамки, еду и заморозку серии 🧊 (v1.7.0).
+  int coins = 0;
+
   String _todayKey = '';
   String _lastSessionDayKey = '';
   String _weekKey = '';
@@ -36,6 +40,7 @@ class PetService extends ChangeNotifier {
   static const String _kLastDay = 'stats_last_session_day';
   static const String _kWeekMinutes = 'stats_week_minutes';
   static const String _kWeekKey = 'stats_week_key';
+  static const String _kCoins = 'economy_coins';
 
   /// Текущий питомец — тот, что ещё не вырос.
   Pet? get activePet {
@@ -67,6 +72,7 @@ class PetService extends ChangeNotifier {
     todayMinutes = _storage.getInt(_kTodayMinutes);
     streakDays = _storage.getInt(_kStreak);
     weekMinutes = _storage.getInt(_kWeekMinutes);
+    coins = _storage.getInt(_kCoins);
     _todayKey = _storage.getString(_kTodayKey);
     _lastSessionDayKey = _storage.getString(_kLastDay);
     _weekKey = _storage.getString(_kWeekKey);
@@ -158,6 +164,10 @@ class PetService extends ChangeNotifier {
     totalMinutes += minutes;
     todayMinutes += minutes;
     weekMinutes += minutes;
+    // XP-экономика (v1.5.0): 1 минута детокса = 1 XP питомцу и 1 монетка.
+    target.xp += minutes;
+    coins += minutes;
+    _storage.setInt(_kCoins, coins);
 
     final String today = _dayKey(DateTime.now());
     if (_lastSessionDayKey != today) {
@@ -184,6 +194,41 @@ class PetService extends ChangeNotifier {
     lastEvolvedPetName = null;
   }
 
+  /// Начислить питомцу XP (кормление, задания, укладывание спать).
+  void addXp(Pet pet, int amount) {
+    if (amount <= 0) return;
+    pet.xp += amount;
+    _persistPets();
+    notifyListeners();
+  }
+
+  void earnCoins(int amount) {
+    if (amount <= 0) return;
+    coins += amount;
+    _storage.setInt(_kCoins, coins);
+    notifyListeners();
+  }
+
+  /// Списать монеты; false — если не хватает.
+  bool spendCoins(int amount) {
+    if (amount <= 0) return true;
+    if (coins < amount) return false;
+    coins -= amount;
+    _storage.setInt(_kCoins, coins);
+    notifyListeners();
+    return true;
+  }
+
+  /// Купить декоративную рамку питомцу из магазина (v1.5.0).
+  bool buyFrame(Pet pet, String frameId, int price) {
+    if (pet.frame == frameId) return true;
+    if (!spendCoins(price)) return false;
+    pet.frame = frameId;
+    _persistPets();
+    notifyListeners();
+    return true;
+  }
+
   void _persistPets() {
     _storage.setString(
       _kPets,
@@ -197,12 +242,14 @@ class PetService extends ChangeNotifier {
     todayMinutes = 0;
     streakDays = 0;
     weekMinutes = 0;
+    coins = 0;
     lastEvolvedPetName = null;
     _lastSessionDayKey = '';
     _storage.setInt(_kTotal, 0);
     _storage.setInt(_kTodayMinutes, 0);
     _storage.setInt(_kStreak, 0);
     _storage.setInt(_kWeekMinutes, 0);
+    _storage.setInt(_kCoins, 0);
     _storage.setString(_kLastDay, '');
     // Коллекция пуста → приложение снова покажет экран выбора питомца.
     _persistPets();

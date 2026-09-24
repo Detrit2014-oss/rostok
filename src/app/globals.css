@@ -121,7 +121,7 @@
   }
 }
 
-/* ── «Время Расти»: анимации сцены питомца (порт pet_canvas.dart) ── */
+/* ── «Росток»: анимации сцены питомца (порт pet_canvas.dart) ── */
 
 @keyframes ttg-bob {
   0%, 100% { transform: translate(0, -2.5px); }

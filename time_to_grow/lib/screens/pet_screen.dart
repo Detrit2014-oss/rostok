@@ -28,7 +28,7 @@ class PetScreen extends StatelessWidget {
     final Pet? active = pet.activePet;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Время Расти')),
+      appBar: AppBar(title: const Text('Росток')),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(

@@ -1,12 +1,18 @@
 "use client";
 
-// Порт lib/screens/pet_selection_screen.dart (v1.2.0): большой экран
+// Порт lib/screens/pet_selection_screen.dart (v1.5.0): большой экран
 // выбора питомца при первом запуске и после взросления предыдущего.
-// 10 больших живых карточек + кубик «Случайный питомец».
+// 30 живых карточек (24 зверя + 6 растений) с фильтрами + кубик.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTTG } from "@/lib/ttg/store";
-import { C, PET_CATALOG, STAGE_THRESHOLDS } from "@/lib/ttg/types";
+import {
+  C,
+  PET_CATALOG,
+  STAGE_THRESHOLDS,
+  isAquatic,
+  isPlant,
+} from "@/lib/ttg/types";
 import type { Pet, PetType } from "@/lib/ttg/types";
 import { PetScene } from "./scene";
 import { BigButton } from "./widgets";
@@ -20,14 +26,36 @@ function previewPet(type: PetType): Pet {
     type,
     bornAt: 0,
     growthMinutes: STAGE_THRESHOLDS[1],
+    xp: 0,
+    frame: "none",
   };
 }
+
+type FilterKind = "all" | "beast" | "water" | "plant";
+const FILTERS: { id: FilterKind; label: string }[] = [
+  { id: "all", label: "Все 30" },
+  { id: "beast", label: "🦁 Звери" },
+  { id: "water", label: "💧 Водные" },
+  { id: "plant", label: "🪴 Растения" },
+];
 
 export function PetChoiceScreen() {
   const pets = useTTG((s) => s.pets);
   const choosePet = useTTG((s) => s.choosePet);
   const cancelPetChoice = useTTG((s) => s.cancelPetChoice);
   const [selected, setSelected] = useState<PetType | null>(null);
+  const [filter, setFilter] = useState<FilterKind>("all");
+
+  const visibleSpecies = useMemo(
+    () =>
+      PET_CATALOG.filter((s) => {
+        if (filter === "all") return true;
+        if (filter === "water") return isAquatic(s.type);
+        if (filter === "plant") return isPlant(s.type);
+        return !isAquatic(s.type) && !isPlant(s.type);
+      }),
+    [filter]
+  );
 
   // Новый питомец вместо выросшего — можно отложить решение.
   const canDismiss = pets.length > 0;
@@ -54,9 +82,27 @@ export function PetChoiceScreen() {
         </p>
       </div>
 
+      <div className="flex shrink-0 gap-2 overflow-x-auto px-4 pt-3">
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setFilter(f.id)}
+            className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-[12.5px] font-extrabold transition-transform active:scale-95"
+            style={{
+              backgroundColor: filter === f.id ? C.green : "#FFFFFF",
+              color: filter === f.id ? "#FFFFFF" : C.inkSoft,
+              border: `2px solid ${filter === f.id ? C.greenDark : C.border}`,
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto py-3">
         <div className="mx-auto grid w-full max-w-[430px] grid-cols-2 gap-3.5 px-4">
-          {PET_CATALOG.map((s) => {
+          {visibleSpecies.map((s) => {
             const active = selected === s.type;
             return (
               <button

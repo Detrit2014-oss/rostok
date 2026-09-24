@@ -1,4 +1,4 @@
-# 🐣 Время Расти (Time to Grow) — v1.1.0
+# 🐣 Росток (Time to Grow) — v1.1.0
 
 Кроссплатформенное Flutter-приложение о цифровой гигиене и ментальном здоровье.
 Идея: вы откладываете телефон — растёт виртуальный питомец. Тестируется в
@@ -45,9 +45,9 @@ flutter run                  # или на подключённом телефо
 
 ## Имя приложения на платформах
 
-- Android: `android/app/src/main/AndroidManifest.xml` → `android:label="Время Расти"`
-- iOS: `ios/Runner/Info.plist` → `CFBundleDisplayName` = Время Расти
-- Web: `web/index.html` → `<title>Время Расти</title>`, `web/manifest.json` → `name`/`short_name`
+- Android: `android/app/src/main/AndroidManifest.xml` → `android:label="Росток"`
+- iOS: `ios/Runner/Info.plist` → `CFBundleDisplayName` = Росток
+- Web: `web/index.html` → `<title>Росток</title>`, `web/manifest.json` → `name`/`short_name`
 
 ## ИИ-дневник (LLM)
 
