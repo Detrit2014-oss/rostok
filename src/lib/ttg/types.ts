@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────
-// «Время Расти» — типы и константы. Порт lib/models + lib/core из
-// Flutter-проекта v1.0.0 (1:1 логика).
+// «Росток» — типы и константы. Порт lib/models + lib/core из
+// Flutter-проекта (1:1 логика). С v1.3.0 зверята вылупляются из яиц,
+// а растения вырастают из семечек.
 // ─────────────────────────────────────────────────────────────────────
 
 export type PetType =
@@ -13,7 +14,29 @@ export type PetType =
   | "penguin"
   | "hedgehog"
   | "panda"
-  | "bear";
+  | "bear"
+  // v1.3.0: растения. Логично, что они не вылупляются из яйца —
+  // они растут из семечка в горшочке (стадия 0 = «Семечко»).
+  | "cactus"
+  | "sunflower"
+  | "clover"
+  | "bonsai"
+  | "fern"
+  | "tulip";
+
+const PLANT_TYPES = new Set<PetType>([
+  "cactus",
+  "sunflower",
+  "clover",
+  "bonsai",
+  "fern",
+  "tulip",
+]);
+
+/** Растение? Тогда вместо яйца — семечко в горшочке. */
+export function isPlant(type: PetType): boolean {
+  return PLANT_TYPES.has(type);
+}
 
 export interface Pet {
   id: string;
@@ -33,6 +56,17 @@ export function petStage(p: Pet): number {
 }
 
 export const STAGE_NAMES = ["Яйцо", "Малыш", "Подросток", "Взрослый"];
+export const PLANT_STAGE_NAMES = ["Семечко", "Росток", "Кустик", "Цветение"];
+
+export function stageName(type: PetType, stage: number): string {
+  const names = isPlant(type) ? PLANT_STAGE_NAMES : STAGE_NAMES;
+  return names[stage] ?? STAGE_NAMES[stage];
+}
+
+export function stageEmoji(type: PetType, stage: number): string {
+  const set = isPlant(type) ? ["🌰", "🌱", "🌿", "🌸"] : ["🥚", "🐥", "🐣", "🐾"];
+  return set[stage] ?? set[0];
+}
 
 export function stageProgress(p: Pet): number {
   const stage = petStage(p);
@@ -170,10 +204,53 @@ export const PET_CATALOG: {
     desc: "Тёплый обнимашка — сладко спит, пока вы отдыхаете",
     accusative: "Медвежонка",
   },
+  // v1.3.0: шесть горшечных растений — растут из семечка, не из яйца.
+  {
+    name: "Кактусёнок",
+    type: "cactus",
+    emoji: "🌵",
+    desc: "Колючий философ — терпеливо растёт из семечка",
+    accusative: "Кактусёнка",
+  },
+  {
+    name: "Подсолнушек",
+    type: "sunflower",
+    emoji: "🌻",
+    desc: "Яркий оптимист — тянется к солнцу вместе с вами",
+    accusative: "Подсолнушка",
+  },
+  {
+    name: "Клеверчик",
+    type: "clover",
+    emoji: "🍀",
+    desc: "Приносит удачу тем, кто отдыхает от экрана",
+    accusative: "Клеверчика",
+  },
+  {
+    name: "Бонсайчик",
+    type: "bonsai",
+    emoji: "🎋",
+    desc: "Мудрец в миниатюре — спокойствие в каждом листке",
+    accusative: "Бонсайчика",
+  },
+  {
+    name: "Папоротик",
+    type: "fern",
+    emoji: "🌿",
+    desc: "Хранитель лесных тайн — любит тихие вечера",
+    accusative: "Папоротика",
+  },
+  {
+    name: "Тюльпанчик",
+    type: "tulip",
+    emoji: "🌷",
+    desc: "Весеннее настроение — расцветает от вашей заботы",
+    accusative: "Тюльпанчика",
+  },
 ];
 
-export const K_APP_VERSION = "1.2.0";
-export const K_APP_BUILD_NUMBER = 3;
+export const K_APP_VERSION = "1.3.0";
+export const K_APP_BUILD_NUMBER = 4;
 export const K_DEFAULT_UPDATE_URL =
   "https://your-username.github.io/time-to-grow-updates/version.json";
 export const K_UPDATE_CHECK_INTERVAL_HOURS = 6;
@@ -210,6 +287,13 @@ export const C = {
   hedgehog: "#C08552",
   panda: "#F2EEE4",
   bear: "#A9744F",
+  // v1.3.0: растения
+  cactus: "#4FA850",
+  sunflower: "#FFB800",
+  clover: "#4CB944",
+  bonsai: "#6B9E4A",
+  fern: "#2F8F5B",
+  tulip: "#FF6B6B",
 } as const;
 
 /** Неизвестный вид (например, сохранение из более новой версии) — красим как лисёнка, чтобы не падать. */
@@ -237,6 +321,18 @@ export function bodyColor(type: PetType): string {
       return C.panda;
     case "bear":
       return C.bear;
+    case "cactus":
+      return C.cactus;
+    case "sunflower":
+      return C.sunflower;
+    case "clover":
+      return C.clover;
+    case "bonsai":
+      return C.bonsai;
+    case "fern":
+      return C.fern;
+    case "tulip":
+      return C.tulip;
     default:
       return FALLBACK_COLOR;
   }

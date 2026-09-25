@@ -32,7 +32,7 @@ class PetSelectionScreen extends StatefulWidget {
 class _PetSelectionScreenState extends State<PetSelectionScreen> {
   PetType? _selected;
 
-  /// Превью-питомец стадии «Малыш» — показывает, кем станет яйцо.
+  /// Превью-питомец стадии «Малыш/Росток» — показывает, кем станет яйцо/семечко.
   Pet _preview(PetType type) => Pet(
         id: 'preview-${type.name}',
         name: speciesOfType(type).name,
@@ -79,7 +79,7 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                 child: Column(
                   children: <Widget>[
                     const Text(
-                      'Выбери питомца! 🐣',
+                      'Выбери питомца! 🐣🌱',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 26,
@@ -89,8 +89,8 @@ class _PetSelectionScreenState extends State<PetSelectionScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Он вырастет, пока вы отдыхаете от телефона. '
-                          'Всего видов: ${kPetCatalog.length}',
+                      'Зверята вылупляются из яйца, растения вырастают '
+                          'из семечка. Всего видов: ${kPetCatalog.length}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14.5,

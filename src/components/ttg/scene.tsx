@@ -5,7 +5,7 @@
 
 import type { CSSProperties } from "react";
 
-import { bodyColor, Pet, petStage, stageProgress } from "@/lib/ttg/types";
+import { bodyColor, isPlant, Pet, petStage, stageProgress } from "@/lib/ttg/types";
 import type { PetType } from "@/lib/ttg/types";
 
 const GROUND_Y = 182.4; // 0.76 * 240
@@ -563,20 +563,467 @@ function BearArt({ sleeping }: ArtProps) {
   );
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Растения v1.3.0 — в горшочках, и никак не из яйца: семечко → росток
+// → кустик → цветение. Горшок общий, у каждого вида своя «крона».
+// ────────────────────────────────────────────────────────────────────
+
+const POT = "#D97941";
+const POT_DARK = "#B85F36";
+const POT_LIGHT = "#EB9A66";
+const SOIL = "#6B4A2E";
+const LEAF = "#57B85C";
+const TRUNK = "#8B5E34";
+
+/** Терракотовый горшок с землёй — общий для всех растений. */
+function Pot() {
+  return (
+    <g>
+      {/* корпус */}
+      <path d="M -14.5 -14 L 14.5 -14 L 11.5 0 Q 0 2.4 -11.5 0 Z" fill={POT} />
+      {/* блик */}
+      <path d="M -10 -11.5 L -7.5 -2" stroke={POT_LIGHT} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+      {/* ободок */}
+      <rect x={-17} y={-22.5} width={34} height={9} rx={3} fill={POT_DARK} />
+      {/* земля */}
+      <ellipse cx={0} cy={-16.5} rx={12.6} ry={3.4} fill={SOIL} />
+    </g>
+  );
+}
+
+function Smile({
+  y,
+  w = 4.6,
+  color = "#4A3B2A",
+}: {
+  y: number;
+  w?: number;
+  color?: string;
+}) {
+  return (
+    <path
+      d={`M ${-w} ${y} Q 0 ${y + w * 0.9} ${w} ${y}`}
+      stroke={color}
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      fill="none"
+    />
+  );
+}
+
+/** Лист-сердечко (клевер): черешок в точке (0,0), лепестки вверх. */
+function HeartLeaf({
+  x,
+  y,
+  rot,
+  s = 1,
+}: {
+  x: number;
+  y: number;
+  rot: number;
+  s?: number;
+}) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
+      <path
+        d="M 0 0 C -6.5 -2.5 -9 -9.5 -3.5 -11.5 C -1.2 -12.3 0 -10.8 0 -9.5 C 0 -10.8 1.2 -12.3 3.5 -11.5 C 9 -9.5 6.5 -2.5 0 0 Z"
+        fill={LEAF}
+      />
+      <path d="M 0 -1.5 L 0 -8.5" stroke={shade(LEAF, -0.18)} strokeWidth="1" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/** Стадия 0 у растений — семечко в горшочке: земля трескается, петелька ростка выглядывает. */
+function SeedArt({ progress }: { progress: number }) {
+  return (
+    <g className="ttg-egg" style={{ "--wobble": "1.2deg" } as CSSProperties}>
+      <Pot />
+      <ellipse cx={0} cy={-19.5} rx={7.5} ry={2.6} fill={shade(SOIL, -0.12)} />
+      <g transform="rotate(-14 0 -23)">
+        <ellipse cx={0} cy={-23} rx={4.4} ry={6} fill="#A9744F" />
+        <ellipse cx={-1.2} cy={-25} rx={1.5} ry={2.6} fill="#C08A5E" opacity="0.85" />
+      </g>
+      {progress > 0.5 && (
+        <polyline
+          points="-6,-18.4 -2.5,-17.6 1.5,-18.6 5.5,-17.8"
+          fill="none"
+          stroke={shade(SOIL, -0.3)}
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+      )}
+      {progress > 0.8 && (
+        <path
+          d="M 0 -26.5 Q 1 -31 4.6 -28.6"
+          stroke={LEAF}
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          fill="none"
+        />
+      )}
+    </g>
+  );
+}
+
+/** КАКТУСЁНОК: ствол с рёбрами, ручки-отростки, иголочки, цветок на макушке. */
+function CactusArt({ stage, sleeping }: { stage: number; sleeping: boolean }) {
+  const body = bodyColor("cactus");
+  const ridge = shade(body, -0.16);
+  const rx = stage === 1 ? 8 : stage === 2 ? 9.5 : 11;
+  const ry = stage === 1 ? 11 : stage === 2 ? 16 : 20.5;
+  const cy = -13 - ry;
+  const faceY = cy + 2;
+  return (
+    <g>
+      {stage >= 3 && (
+        <path
+          d={`M ${rx - 2.5} ${cy + 5} Q 17 ${cy + 5} 17 ${cy - 2} L 17 ${cy - 7}`}
+          stroke={body}
+          strokeWidth="8"
+          strokeLinecap="round"
+          fill="none"
+        />
+      )}
+      {stage >= 2 && (
+        <path
+          d={`M ${-(rx - 2.5)} ${cy + 8} Q -16.5 ${cy + 8} -16.5 ${cy} L -16.5 ${cy - 6}`}
+          stroke={body}
+          strokeWidth="7.5"
+          strokeLinecap="round"
+          fill="none"
+        />
+      )}
+      <ellipse cx={0} cy={cy} rx={rx} ry={ry} fill={body} />
+      <g stroke={ridge} strokeWidth="1.5" strokeLinecap="round" opacity="0.6" fill="none">
+        <path d={`M ${-rx * 0.45} ${cy - ry + 4} L ${-rx * 0.45} -16`} />
+        <path d={`M ${rx * 0.45} ${cy - ry + 4} L ${rx * 0.45} -16`} />
+      </g>
+      <g stroke="#FFFFFF" strokeWidth="1.3" strokeLinecap="round" opacity="0.75">
+        <path d="M -6.5 -33 l 2.4 -2.4" />
+        <path d="M 6.5 -29 l 2.4 -2.4" />
+        <path d="M -6 -21.5 l 2.4 -2.4" />
+        {stage >= 2 && <path d="M 6.5 -40 l 2.4 -2.4" />}
+        {stage >= 3 && <path d="M -6.5 -45 l 2.4 -2.4" />}
+      </g>
+      {stage >= 3 && (
+        <g>
+          {[0, 72, 144, 216, 288].map((a) => (
+            <circle
+              key={a}
+              cx={7.2 * Math.cos((a * Math.PI) / 180)}
+              cy={cy - ry - 3 + 7.2 * Math.sin((a * Math.PI) / 180)}
+              r={3.4}
+              fill="#FFD24C"
+            />
+          ))}
+          <circle cx={0} cy={cy - ry - 3} r={2.6} fill="#E8890C" />
+        </g>
+      )}
+      <Blush dx={rx * 0.72} y={faceY + 4.5} r={2.8} opacity={0.4} />
+      <Eyes dx={4.6} y={faceY} r={4.1} sleeping={sleeping} />
+      <Smile y={faceY + 6.4} w={3.4} />
+    </g>
+  );
+}
+
+/** ПОДСОЛНУШЕК: стебель, листья с прожилками, бутон → жёлтая головка с лицом. */
+function SunflowerArt({ stage, sleeping }: { stage: number; sleeping: boolean }) {
+  const stemTop = stage === 1 ? -31 : stage === 2 ? -47 : -50;
+  const petalY = -64;
+  return (
+    <g>
+      <path d={`M 0 -17 Q 2 ${(stemTop - 17) / 2} 0 ${stemTop}`} stroke="#57B85C" strokeWidth={stage === 1 ? 3 : 4.2} strokeLinecap="round" fill="none" />
+      {stage >= 2 && (
+        <g>
+          <ellipse cx={-9.5} cy={-30} rx={8.5} ry={4} fill={LEAF} transform="rotate(-18 -9.5 -30)" />
+          <path d="M -14.5 -31.5 L -4.5 -28.5" stroke={shade(LEAF, -0.2)} strokeWidth="1.2" strokeLinecap="round" />
+          <ellipse cx={9.5} cy={-36} rx={8.5} ry={4} fill={LEAF} transform="rotate(18 9.5 -36)" />
+          <path d="M 14.5 -37.5 L 4.5 -34.5" stroke={shade(LEAF, -0.2)} strokeWidth="1.2" strokeLinecap="round" />
+        </g>
+      )}
+      {stage === 1 && (
+        <g>
+          <ellipse cx={-6} cy={-30.5} rx={5.5} ry={3} fill={LEAF} transform="rotate(-22 -6 -30.5)" />
+          <ellipse cx={6} cy={-30.5} rx={5.5} ry={3} fill={LEAF} transform="rotate(22 6 -30.5)" />
+          <circle cx={0} cy={-34.5} r={4.4} fill="#8FCF7A" />
+          <Eyes dx={2.3} y={-35.4} r={2} sleeping={sleeping} />
+          <Smile y={-33.2} w={1.7} />
+        </g>
+      )}
+      {stage === 2 && (
+        <g>
+          <path d="M -6.5 -46.5 L 0 -50.5 L 6.5 -46.5 Q 0 -43.5 -6.5 -46.5 Z" fill={shade(LEAF, -0.05)} />
+          <ellipse cx={0} cy={-53.5} rx={7} ry={8.5} fill="#7FB069" />
+          <path d="M -2.6 -46.8 Q -3.2 -52 -2 -58" stroke={shade("#7FB069", -0.2)} strokeWidth="1.3" fill="none" strokeLinecap="round" />
+          <path d="M 2.6 -46.8 Q 3.2 -52 2 -58" stroke={shade("#7FB069", -0.2)} strokeWidth="1.3" fill="none" strokeLinecap="round" />
+          <Blush dx={5.2} y={-50.5} r={2.1} opacity={0.4} />
+          <Eyes dx={3.4} y={-54.2} r={2.9} sleeping={sleeping} />
+          <Smile y={-50.4} w={2.5} />
+        </g>
+      )}
+      {stage >= 3 && (
+        <g>
+          {Array.from({ length: 12 }, (_, i) => {
+            const a = (i * 30 * Math.PI) / 180;
+            const px = 15.8 * Math.cos(a);
+            const py = petalY + 15.8 * Math.sin(a);
+            return (
+              <ellipse
+                key={i}
+                cx={px}
+                cy={py}
+                rx={6.6}
+                ry={3.5}
+                fill="#FFC800"
+                transform={`rotate(${i * 30} ${px} ${py})`}
+              />
+            );
+          })}
+          <circle cx={0} cy={petalY} r={10.5} fill="#8A5A2B" />
+          <circle cx={0} cy={petalY} r={10.5} fill="none" stroke={shade("#8A5A2B", -0.2)} strokeWidth="1.4" />
+          <Blush dx={7.2} y={petalY + 4.4} r={2.7} opacity={0.4} />
+          <Eyes dx={4.4} y={petalY - 1} r={3.9} sleeping={sleeping} />
+          <Smile y={petalY + 4.4} w={3.2} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+/** КЛЕВЕРЧИК: листья-сердечки, на цветении — четыре листа на удачу и белые цветки. */
+function CloverArt({ stage, sleeping }: { stage: number; sleeping: boolean }) {
+  return (
+    <g>
+      <g stroke={shade(LEAF, -0.1)} strokeWidth="1.6" strokeLinecap="round" fill="none">
+        {stage === 1 && <path d="M 0 -17 Q -0.5 -21 -1 -25" />}
+        {stage >= 2 && (
+          <>
+            <path d="M 0 -17 Q -5 -22 -9 -26" />
+            <path d="M 0 -17 Q 5 -22 9 -26" />
+            <path d="M 0 -17 Q -0.5 -26 0 -32" />
+          </>
+        )}
+        {stage >= 3 && <path d="M 0 -17 Q 2 -26 5.5 -39" />}
+      </g>
+      {stage === 1 && (
+        <g>
+          <HeartLeaf x={-1} y={-24.5} rot={-8} s={1.15} />
+          <Eyes dx={2.7} y={-30.5} r={2.2} sleeping={sleeping} />
+          <Smile y={-28} w={1.9} />
+        </g>
+      )}
+      {stage === 2 && (
+        <g>
+          <HeartLeaf x={-9.5} y={-25.5} rot={-32} s={1.05} />
+          <HeartLeaf x={9.5} y={-25.5} rot={32} s={1.05} />
+          <HeartLeaf x={0} y={-31.5} rot={0} s={1.15} />
+          <Blush dx={5} y={-29.5} r={2} opacity={0.4} />
+          <Eyes dx={3} y={-31.5} r={2.6} sleeping={sleeping} />
+          <Smile y={-29} w={2.2} />
+        </g>
+      )}
+      {stage >= 3 && (
+        <g>
+          <HeartLeaf x={-10.5} y={-26.5} rot={-36} s={1.3} />
+          <HeartLeaf x={10.5} y={-26.5} rot={36} s={1.3} />
+          <HeartLeaf x={-5.5} y={-38.5} rot={-10} s={1.25} />
+          <HeartLeaf x={6} y={-38.5} rot={10} s={1.25} />
+          {/* белые цветки удачи */}
+          <g fill="#FFFFFF">
+            <circle cx={-14} cy={-20} r={1.7} />
+            <circle cx={-16.4} cy={-19} r={1.7} />
+            <circle cx={-15.2} cy={-17.6} r={1.7} />
+            <circle cx={14.5} cy={-21.5} r={1.7} />
+            <circle cx={16.9} cy={-20.5} r={1.7} />
+            <circle cx={15.7} cy={-19.1} r={1.7} />
+          </g>
+          <circle cx={-15.2} cy={-18.9} r={1.1} fill="#FFC800" />
+          <circle cx={15.7} cy={-20.4} r={1.1} fill="#FFC800" />
+          <Blush dx={5.6} y={-31} r={2.2} opacity={0.4} />
+          <Eyes dx={3.4} y={-33} r={3} sleeping={sleeping} />
+          <Smile y={-30.4} w={2.5} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+/** БОНСАЙЧИК: изогнутый ствол, облака листвы, мох на земле. */
+function BonsaiArt({ stage, sleeping }: { stage: number; sleeping: boolean }) {
+  const foliage = bodyColor("bonsai");
+  const cloudDark = shade(foliage, -0.12);
+  return (
+    <g>
+      {stage === 1 && (
+        <g>
+          <path d="M 0 -17 L 0 -26" stroke={TRUNK} strokeWidth="4" strokeLinecap="round" fill="none" />
+          <ellipse cx={0} cy={-31.5} rx={9} ry={7} fill={foliage} />
+          <Blush dx={5.5} y={-29.5} r={1.9} opacity={0.4} />
+          <Eyes dx={3.4} y={-32.2} r={2.7} sleeping={sleeping} />
+          <Smile y={-29.6} w={2.3} />
+        </g>
+      )}
+      {stage === 2 && (
+        <g>
+          <path d="M 0 -17 C 0 -22 -3.5 -25 -3 -30" stroke={TRUNK} strokeWidth="5" strokeLinecap="round" fill="none" />
+          <path d="M -1 -26 Q 4 -27.5 6.5 -29.5" stroke={TRUNK} strokeWidth="3.4" strokeLinecap="round" fill="none" />
+          <ellipse cx={-4.5} cy={-35.5} rx={8.5} ry={6.5} fill={foliage} />
+          <ellipse cx={7} cy={-32} rx={6.5} ry={5} fill={cloudDark} />
+          <Blush dx={0.8} y={-33.5} r={1.9} opacity={0.4} />
+          <Eyes dx={-1.2} y={-36.2} r={2.7} sleeping={sleeping} />
+          <Smile y={-33.6} w={2.3} />
+        </g>
+      )}
+      {stage >= 3 && (
+        <g>
+          <path d="M 0 -17 C 1 -24 -4.5 -28 -2.5 -36" stroke={TRUNK} strokeWidth="6.5" strokeLinecap="round" fill="none" />
+          <path d="M -2 -31 Q -8 -32.5 -10.5 -35" stroke={TRUNK} strokeWidth="3.5" strokeLinecap="round" fill="none" />
+          <path d="M -2.5 -35 Q 4 -37.5 7 -39" stroke={TRUNK} strokeWidth="3.5" strokeLinecap="round" fill="none" />
+          <ellipse cx={-11} cy={-38.5} rx={7.5} ry={5.5} fill={cloudDark} />
+          <ellipse cx={10} cy={-41} rx={7} ry={5.2} fill={cloudDark} />
+          <ellipse cx={0} cy={-46.5} rx={12} ry={9} fill={foliage} />
+          {/* мох на земле */}
+          <g fill={LEAF} opacity="0.85">
+            <circle cx={-6} cy={-17.5} r={1.7} />
+            <circle cx={7} cy={-18} r={1.5} />
+            <circle cx={2} cy={-16.8} r={1.3} />
+          </g>
+          <Blush dx={7} y={-44} r={2.4} opacity={0.4} />
+          <Eyes dx={4.2} y={-47} r={3.4} sleeping={sleeping} />
+          <Smile y={-44.2} w={2.9} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+/** ПАПОРОТИК: улитка-завиток → арки ваи́й с листочками, лицо у основания. */
+function FernArt({ stage, sleeping }: { stage: number; sleeping: boolean }) {
+  const frond = bodyColor("fern");
+  const tick = shade(frond, -0.12);
+  return (
+    <g>
+      {stage === 1 && (
+        <g stroke={frond} strokeWidth="2.6" strokeLinecap="round" fill="none">
+          <path d="M 0 -17 C 0 -24 -4.5 -27 -4.5 -23.5 C -4.5 -20.5 -1.2 -21 -0.8 -24" />
+          <path d="M 1 -17 Q 3.5 -22 3 -26" strokeWidth="2" />
+        </g>
+      )}
+      {stage === 2 && (
+        <g stroke={frond} strokeWidth="2.8" strokeLinecap="round" fill="none">
+          <path d="M 0 -17 C -5 -23 -10 -26 -15.5 -26.5" />
+          <path d="M 0 -17 C 5 -23 10 -26 15.5 -26.5" />
+          <path d="M 0 -17 C -0.5 -25 -1 -30 0.5 -34" strokeWidth="2.4" />
+        </g>
+      )}
+      {stage >= 3 && (
+        <g stroke={frond} strokeWidth="3" strokeLinecap="round" fill="none">
+          <path d="M 0 -17 C -6 -24 -12 -28 -19 -28.5" />
+          <path d="M 0 -17 C 6 -24 12 -28 19 -28.5" />
+          <path d="M 0 -17 C -4 -27 -6 -34 -5.5 -40" strokeWidth="2.6" />
+          <path d="M 0 -17 C 4 -27 6 -34 5.5 -40" strokeWidth="2.6" />
+          <path d="M 0 -17 C 0 -26 0.5 -33 -0.5 -38" strokeWidth="2.4" />
+        </g>
+      )}
+      {/* листочки на ваи́ях */}
+      <g stroke={tick} strokeWidth="1.5" strokeLinecap="round">
+        {stage === 2 && (
+          <>
+            <path d="M -6 -22.5 L -5.4 -26.6" />
+            <path d="M -10.5 -25 L -9.4 -28.9" />
+            <path d="M 6 -22.5 L 5.4 -26.6" />
+            <path d="M 10.5 -25 L 9.4 -28.9" />
+            <path d="M -1.5 -27 L -4 -29.4" />
+            <path d="M 1.5 -27 L 4 -29.4" />
+          </>
+        )}
+        {stage >= 3 && (
+          <>
+            <path d="M -7 -22.5 L -6.3 -27" />
+            <path d="M -12 -26 L -10.7 -30.6" />
+            <path d="M -16.5 -27.6 L -15.3 -32.2" />
+            <path d="M 7 -22.5 L 6.3 -27" />
+            <path d="M 12 -26 L 10.7 -30.6" />
+            <path d="M 16.5 -27.6 L 15.3 -32.2" />
+            <path d="M -5 -33 L -8 -35" />
+            <path d="M 5 -33 L 8 -35" />
+            <path d="M -5.5 -38 L -8.5 -39.8" />
+            <path d="M 5.5 -38 L 8.5 -39.8" />
+          </>
+        )}
+      </g>
+      <Blush dx={4.6} y={-19.8} r={1.9} opacity={0.4} />
+      <Eyes dx={3.1} y={-22} r={2.4} sleeping={sleeping} />
+      <Smile y={-19.9} w={1.9} />
+    </g>
+  );
+}
+
+/** ТЮЛЬПАНЧИК: листья, бутон с чашелистиками → раскрытый цветок с лицом. */
+function TulipArt({ stage, sleeping }: { stage: number; sleeping: boolean }) {
+  const petal = bodyColor("tulip");
+  const petalDark = shade(petal, -0.16);
+  const stemTop = stage === 1 ? -24 : stage === 2 ? -40 : -46;
+  return (
+    <g>
+      <path d={`M 0 -17 Q 1.5 ${(stemTop - 17) / 2} 0 ${stemTop}`} stroke="#57B85C" strokeWidth={stage === 1 ? 2.6 : 3.6} strokeLinecap="round" fill="none" />
+      {/* длинные листья */}
+      <path d="M 0 -18 Q -8 -24 -7.5 -40 Q -2.5 -30 0.5 -22 Z" fill={LEAF} />
+      <path d="M 0 -18 Q 8 -24 7.5 -40 Q 2.5 -30 -0.5 -22 Z" fill={shade(LEAF, -0.08)} />
+      {stage === 1 && (
+        <g>
+          <Eyes dx={2.5} y={-25.5} r={2} sleeping={sleeping} />
+          <Smile y={-23.4} w={1.7} />
+        </g>
+      )}
+      {stage === 2 && (
+        <g>
+          <path d="M -6 -38.5 L 0 -41.5 L 6 -38.5 Q 0 -35.5 -6 -38.5 Z" fill={shade(LEAF, -0.05)} />
+          <ellipse cx={0} cy={-46} rx={6.5} ry={8} fill={petal} />
+          <path d="M -2.6 -39.5 Q -3.4 -46 -2.2 -52.4" stroke={petalDark} strokeWidth="1.3" fill="none" strokeLinecap="round" />
+          <path d="M 2.6 -39.5 Q 3.4 -46 2.2 -52.4" stroke={petalDark} strokeWidth="1.3" fill="none" strokeLinecap="round" />
+          <Blush dx={4.8} y={-43.5} r={1.9} opacity={0.4} />
+          <Eyes dx={3.2} y={-46.8} r={2.6} sleeping={sleeping} />
+          <Smile y={-43.9} w={2.2} />
+        </g>
+      )}
+      {stage >= 3 && (
+        <g>
+          {/* раскрытый тюльпан: чашечка + боковые лепестки */}
+          <path
+            d="M -9.5 -54 C -9.5 -62.5 -5 -66.5 0 -62.5 C 5 -66.5 9.5 -62.5 9.5 -54 C 9.5 -47.5 5 -44 0 -44 C -5 -44 -9.5 -47.5 -9.5 -54 Z"
+            fill={petal}
+          />
+          <path d="M -3 -62.4 C -6 -58 -6.4 -50.5 -5.2 -45.2" stroke={petalDark} strokeWidth="1.7" fill="none" strokeLinecap="round" />
+          <path d="M 3 -62.4 C 6 -58 6.4 -50.5 5.2 -45.2" stroke={petalDark} strokeWidth="1.7" fill="none" strokeLinecap="round" />
+          <Blush dx={6.4} y={-50.5} r={2.4} opacity={0.4} />
+          <Eyes dx={4.1} y={-53.8} r={3.1} sleeping={sleeping} />
+          <Smile y={-50.8} w={2.6} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+const PLANT_SCALE = 1.35; // растения меньше зверят — рисуем крупнее, чтобы горшок читался
+
 function Creature({
   s,
   type,
+  stage,
   sleeping,
 }: {
   s: number;
   type: PetType;
+  stage: number;
   sleeping: boolean;
 }) {
   return (
     <g>
       {/* Мягкая тень на траве */}
       <ellipse cx={0} cy={0.5} rx={26 * s} ry={4.6 * s} fill="#3E6B22" opacity="0.16" />
-      <g transform={`scale(${s})`}>
+      <g transform={`scale(${s * (isPlant(type) ? PLANT_SCALE : 1)})`}>
         {type === "fox" && <FoxArt sleeping={sleeping} />}
         {type === "cat" && <CatArt sleeping={sleeping} />}
         {type === "owl" && <OwlArt sleeping={sleeping} />}
@@ -587,6 +1034,32 @@ function Creature({
         {type === "hedgehog" && <HedgehogArt sleeping={sleeping} />}
         {type === "panda" && <PandaArt sleeping={sleeping} />}
         {type === "bear" && <BearArt sleeping={sleeping} />}
+        {isPlant(type) && <PlantArt type={type} stage={stage} sleeping={sleeping} />}
+      </g>
+    </g>
+  );
+}
+
+/** Роутер растений: горшок стоит на земле, «крона» плавно качается. */
+function PlantArt({
+  type,
+  stage,
+  sleeping,
+}: {
+  type: PetType;
+  stage: number;
+  sleeping: boolean;
+}) {
+  return (
+    <g>
+      <Pot />
+      <g className={sleeping ? undefined : "ttg-sway"}>
+        {type === "cactus" && <CactusArt stage={stage} sleeping={sleeping} />}
+        {type === "sunflower" && <SunflowerArt stage={stage} sleeping={sleeping} />}
+        {type === "clover" && <CloverArt stage={stage} sleeping={sleeping} />}
+        {type === "bonsai" && <BonsaiArt stage={stage} sleeping={sleeping} />}
+        {type === "fern" && <FernArt stage={stage} sleeping={sleeping} />}
+        {type === "tulip" && <TulipArt stage={stage} sleeping={sleeping} />}
       </g>
     </g>
   );
@@ -617,9 +1090,15 @@ function PetFigure({
         style={{ animationDelay: `${-index * 0.7}s` }}
       >
         {stage === 0 ? (
-          <Egg spot={bodyColor(pet.type)} progress={stageProgress(pet)} />
+          isPlant(pet.type) ? (
+            <g transform="scale(1.3)">
+              <SeedArt progress={stageProgress(pet)} />
+            </g>
+          ) : (
+            <Egg spot={bodyColor(pet.type)} progress={stageProgress(pet)} />
+          )
         ) : (
-          <Creature s={s} type={pet.type} sleeping={sleeping} />
+          <Creature s={s} type={pet.type} stage={stage} sleeping={sleeping} />
         )}
         {/* zzz над спящим активным питомцем */}
         {sleeping && isLast && (

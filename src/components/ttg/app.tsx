@@ -16,7 +16,7 @@ import { PawPrint, NotebookPen, Trophy, User } from "lucide-react";
 import { Toaster } from "sonner";
 
 const TABS = [
-  { key: "pet", label: "Питомец", icon: PawPrint, title: "Время Расти" },
+  { key: "pet", label: "Питомец", icon: PawPrint, title: "Росток" },
   { key: "diary", label: "Дневник", icon: NotebookPen, title: "Дневник настроения" },
   { key: "challenge", label: "Челлендж", icon: Trophy, title: "Челленджи" },
   { key: "profile", label: "Профиль", icon: User, title: "Профиль" },
@@ -75,7 +75,7 @@ export function TTGApp() {
         <div className="flex flex-col items-center gap-3">
           <span className="text-4xl">🌱</span>
           <span className="text-[15px] font-bold" style={{ color: C.inkSoft }}>
-            Время Расти…
+            Росток…
           </span>
         </div>
       </div>

@@ -29,7 +29,7 @@ import { moodAnalyze } from "./moodai";
 import { compareVersions, dayKey, mondayMs, nextVersion, seededRandom, stringHash } from "./format";
 
 export const K_DIARY_SYSTEM_PROMPT =
-  "Ты — тёплый и заботливый ИИ-садовник приложения «Время Расти» " +
+  "Ты — тёплый и заботливый ИИ-садовник приложения «Росток» " +
   "о цифровой гигиене и ментальном здоровье. Пользователь вечером пишет " +
   "короткую заметку о своём дне. Ответь на русском: 2–4 предложения. " +
   "Поддержи человека, мягко отрази его чувства без осуждения и дай одну " +
@@ -158,7 +158,8 @@ interface TTGState {
   resetAll: () => void;
 }
 
-function makeEgg(index: number): Pet {
+/** Новый подопечный: зверёнок вылупится из яйца, растение взойдёт из семечка. */
+function makeNewborn(index: number): Pet {
   const species = PET_CATALOG[index % PET_CATALOG.length];
   return {
     id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
@@ -332,7 +333,7 @@ export const useTTG = create<TTGState>()(
         let pets = [...s.pets];
         let targetIdx = pets.findIndex((p) => petStage(p) < 3);
         if (targetIdx === -1) {
-          pets.push(makeEgg(pets.length));
+          pets.push(makeNewborn(pets.length));
           targetIdx = pets.length - 1;
         }
         const target = pets[targetIdx];

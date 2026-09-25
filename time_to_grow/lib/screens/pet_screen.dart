@@ -28,7 +28,7 @@ class PetScreen extends StatelessWidget {
     final Pet? active = pet.activePet;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Время Расти')),
+      appBar: AppBar(title: const Text('Росток')),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -238,7 +238,7 @@ class PetScreen extends StatelessWidget {
               Expanded(
                 child: Text(
                   active == null
-                      ? 'Ждём новое яйцо'
+                      ? 'Ждём нового питомца'
                       : '${active.name} — ${active.stageName}',
                   style: const TextStyle(
                       fontWeight: FontWeight.w800, fontSize: 15),
@@ -332,7 +332,7 @@ class PetScreen extends StatelessWidget {
               ),
             ),
             child: Text(
-              '${_stageEmoji(p.stage)} ${p.name} · ${p.stageName}',
+              '${_stageEmoji(p.type, p.stage)} ${p.name} · ${p.stageName}',
               style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
@@ -343,17 +343,12 @@ class PetScreen extends StatelessWidget {
     );
   }
 
-  String _stageEmoji(int stage) {
-    switch (stage) {
-      case 3:
-        return '🐾';
-      case 2:
-        return '🐣';
-      case 1:
-        return '🐥';
-      default:
-        return '🥚';
-    }
+  /// Эмодзи стадии: у растений — своя линия (семечко → цветок).
+  String _stageEmoji(PetType type, int stage) {
+    const List<String> plant = <String>['🌰', '🌱', '🌿', '🌸'];
+    const List<String> animal = <String>['🥚', '🐥', '🐣', '🐾'];
+    final List<String> set = type.isPlant ? plant : animal;
+    return stage >= 0 && stage < set.length ? set[stage] : set.first;
   }
 
   Future<void> _stopSession(BuildContext context) async {
@@ -385,7 +380,7 @@ class PetScreen extends StatelessWidget {
         title: const Text('Ура! 🎉'),
         content: Text(
           '«$name» вырос во взрослого питомца! На следующей прогулке '
-          'появится новое яйцо — коллекция продолжается.',
+          'появится новый питомец — коллекция продолжается.',
         ),
         actions: <Widget>[
           TextButton(

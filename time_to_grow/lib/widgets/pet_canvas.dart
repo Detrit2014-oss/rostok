@@ -71,6 +71,21 @@ class _PetScenePainter extends CustomPainter {
   static const Color _panda = Color(0xFFF2EEE4);
   static const Color _bear = Color(0xFFA9744F);
 
+  // v1.3.0: цвета растений
+  static const Color _cactusC = Color(0xFF4FA850);
+  static const Color _sunflowerC = Color(0xFFFFB800);
+  static const Color _cloverC = Color(0xFF4CB944);
+  static const Color _bonsaiC = Color(0xFF6B9E4A);
+  static const Color _fernC = Color(0xFF2F8F5B);
+  static const Color _tulipC = Color(0xFFFF6B6B);
+
+  static const Color _potC = Color(0xFFD97941);
+  static const Color _potDarkC = Color(0xFFB85F36);
+  static const Color _potLightC = Color(0xFFEB9A66);
+  static const Color _soilC = Color(0xFF6B4A2E);
+  static const Color _leafC = Color(0xFF57B85C);
+  static const Color _trunkC = Color(0xFF8B5E34);
+
   static const Color _beakOrange = Color(0xFFFF9500);
   static const Color _dark = Color(0xFF3A3A3A);
   static const Color _spike = Color(0xFF8B5E34);
@@ -196,6 +211,18 @@ class _PetScenePainter extends CustomPainter {
         return _panda;
       case PetType.bear:
         return _bear;
+      case PetType.cactus:
+        return _cactusC;
+      case PetType.sunflower:
+        return _sunflowerC;
+      case PetType.clover:
+        return _cloverC;
+      case PetType.bonsai:
+        return _bonsaiC;
+      case PetType.fern:
+        return _fernC;
+      case PetType.tulip:
+        return _tulipC;
     }
   }
 
@@ -314,7 +341,13 @@ class _PetScenePainter extends CustomPainter {
     final double scale = 0.55 + pet.stage * 0.22;
 
     if (pet.stage == 0) {
-      _paintEgg(canvas, base, body, pet.stageProgress);
+      // v1.3.0: растения растут из семечка в горшочке — это логично,
+      // а не из яйца, как у зверят.
+      if (type.isPlant) {
+        _paintSeed(canvas, base, pet.stageProgress);
+      } else {
+        _paintEgg(canvas, base, body, pet.stageProgress);
+      }
       return;
     }
 
@@ -334,38 +367,74 @@ class _PetScenePainter extends CustomPainter {
       Paint()..color = const Color(0xFF3E6B22).withOpacity(0.16),
     );
 
-    canvas.scale(scale);
-    switch (type) {
-      case PetType.fox:
-        _paintFox(canvas, closed);
-        break;
-      case PetType.cat:
-        _paintCat(canvas, closed);
-        break;
-      case PetType.owl:
-        _paintOwl(canvas, closed);
-        break;
-      case PetType.dragon:
-        _paintDragon(canvas, closed);
-        break;
-      case PetType.duck:
-        _paintDuck(canvas, closed);
-        break;
-      case PetType.bunny:
-        _paintBunny(canvas, closed);
-        break;
-      case PetType.penguin:
-        _paintPenguin(canvas, closed);
-        break;
-      case PetType.hedgehog:
-        _paintHedgehog(canvas, closed);
-        break;
-      case PetType.panda:
-        _paintPanda(canvas, closed);
-        break;
-      case PetType.bear:
-        _paintBear(canvas, closed);
-        break;
+    canvas.scale(scale * (type.isPlant ? 1.35 : 1.0));
+    if (type.isPlant) {
+      // Горшок стоит на месте, «крона» плавно качается.
+      _paintPot(canvas);
+      if (!sleeping) {
+        canvas.save();
+        canvas.rotate(math.sin(phase * 2 * math.pi) * 0.038);
+      }
+      switch (type) {
+        case PetType.cactus:
+          _paintCactus(canvas, pet.stage, closed);
+          break;
+        case PetType.sunflower:
+          _paintSunflower(canvas, pet.stage, closed);
+          break;
+        case PetType.clover:
+          _paintClover(canvas, pet.stage, closed);
+          break;
+        case PetType.bonsai:
+          _paintBonsai(canvas, pet.stage, closed);
+          break;
+        case PetType.fern:
+          _paintFern(canvas, pet.stage, closed);
+          break;
+        case PetType.tulip:
+          _paintTulip(canvas, pet.stage, closed);
+          break;
+        default:
+          break;
+      }
+      if (!sleeping) {
+        canvas.restore();
+      }
+    } else {
+      switch (type) {
+        case PetType.fox:
+          _paintFox(canvas, closed);
+          break;
+        case PetType.cat:
+          _paintCat(canvas, closed);
+          break;
+        case PetType.owl:
+          _paintOwl(canvas, closed);
+          break;
+        case PetType.dragon:
+          _paintDragon(canvas, closed);
+          break;
+        case PetType.duck:
+          _paintDuck(canvas, closed);
+          break;
+        case PetType.bunny:
+          _paintBunny(canvas, closed);
+          break;
+        case PetType.penguin:
+          _paintPenguin(canvas, closed);
+          break;
+        case PetType.hedgehog:
+          _paintHedgehog(canvas, closed);
+          break;
+        case PetType.panda:
+          _paintPanda(canvas, closed);
+          break;
+        case PetType.bear:
+          _paintBear(canvas, closed);
+          break;
+        default:
+          break;
+      }
     }
     canvas.restore();
 
@@ -1031,6 +1100,505 @@ class _PetScenePainter extends CustomPainter {
     _eyes(canvas, 9.2, -48, 5.8, closed);
   }
 
+
+  // ── Растения v1.3.0: семечко → росток → кустик → цветение ───────────
+  // Портировано 1:1 из src/components/ttg/scene.tsx (веб-демо).
+  // Горшок общий, у каждого вида своя «крона» и лицо.
+
+  Paint _strokeP(Color c, double w) => Paint()
+    ..color = c
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = w
+    ..strokeCap = StrokeCap.round;
+
+  /// Дуга-улыбка растений (проще, чем «двойная улыбка» зверят).
+  void _smileArc(Canvas canvas, double y, double w) {
+    final Path path = Path()
+      ..moveTo(-w, y)
+      ..quadraticBezierTo(0, y + w * 0.9, w, y);
+    canvas.drawPath(path, _strokeP(const Color(0xFF4A3B2A), 1.7));
+  }
+
+  /// Лист-сердечко (клевер): черешок в точке (x, y).
+  void _heartLeaf(Canvas canvas, double x, double y, double rotDeg, double s) {
+    canvas.save();
+    canvas.translate(x, y);
+    canvas.rotate(rotDeg * math.pi / 180);
+    canvas.scale(s);
+    final Path heart = Path()
+      ..moveTo(0, 0)
+      ..cubicTo(-6.5, -2.5, -9, -9.5, -3.5, -11.5)
+      ..cubicTo(-1.2, -12.3, 0, -10.8, 0, -9.5)
+      ..cubicTo(0, -10.8, 1.2, -12.3, 3.5, -11.5)
+      ..cubicTo(9, -9.5, 6.5, -2.5, 0, 0)
+      ..close();
+    canvas.drawPath(heart, Paint()..color = _leafC);
+    canvas.drawLine(
+        const Offset(0, -1.5),
+        const Offset(0, -8.5),
+        _strokeP(_shade(_leafC, -0.18), 1));
+    canvas.restore();
+  }
+
+  /// Терракотовый горшок с землёй — общий для всех растений.
+  void _paintPot(Canvas canvas) {
+    final Path pot = Path()
+      ..moveTo(-14.5, -14)
+      ..lineTo(14.5, -14)
+      ..lineTo(11.5, 0)
+      ..quadraticBezierTo(0, 2.4, -11.5, 0)
+      ..close();
+    canvas.drawPath(pot, Paint()..color = _potC);
+    canvas.drawLine(const Offset(-10, -11.5), const Offset(-7.5, -2),
+        _strokeP(_potLightC, 2.4));
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          const Rect.fromLTWH(-17, -22.5, 34, 9), const Radius.circular(3)),
+      Paint()..color = _potDarkC,
+    );
+    _oval(canvas, 0, -16.5, 12.6, 3.4, Paint()..color = _soilC);
+  }
+
+  /// Стадия 0 у растений — семечко в горшочке: земля трескается,
+  /// петелька ростка выглядывает перед всходом.
+  void _paintSeed(Canvas canvas, Offset base, double progress) {
+    canvas.save();
+    canvas.translate(base.dx, base.dy);
+    canvas.rotate(math.sin(phase * 2 * math.pi * 1.6) * 0.021);
+
+    _paintPot(canvas);
+    _oval(canvas, 0, -19.5, 7.5, 2.6, Paint()..color = _shade(_soilC, -0.12));
+
+    canvas.save();
+    canvas.translate(0, -23);
+    canvas.rotate(-14 * math.pi / 180);
+    _oval(canvas, 0, 0, 4.4, 6, Paint()..color = const Color(0xFFA9744F));
+    _oval(
+      canvas,
+      -1.2,
+      -2,
+      1.5,
+      2.6,
+      Paint()..color = const Color(0xFFC08A5E).withOpacity(0.85),
+    );
+    canvas.restore();
+
+    if (progress > 0.5) {
+      final Path crack = Path()
+        ..moveTo(-6, -18.4)
+        ..lineTo(-2.5, -17.6)
+        ..lineTo(1.5, -18.6)
+        ..lineTo(5.5, -17.8);
+      canvas.drawPath(crack, _strokeP(_shade(_soilC, -0.3), 1.4));
+    }
+    if (progress > 0.8) {
+      final Path loop = Path()
+        ..moveTo(0, -26.5)
+        ..quadraticBezierTo(1, -31, 4.6, -28.6);
+      canvas.drawPath(loop, _strokeP(_leafC, 2.2));
+    }
+    canvas.restore();
+  }
+
+  /// КАКТУСЁНОК: ствол с рёбрами, ручки-отростки, иголочки, цветок.
+  void _paintCactus(Canvas canvas, int stage, bool closed) {
+    final Color body = _cactusC;
+    final Color ridge = _shade(body, -0.16);
+    final double rx = stage == 1 ? 8 : stage == 2 ? 9.5 : 11;
+    final double ry = stage == 1 ? 11 : stage == 2 ? 16 : 20.5;
+    final double cy = -13 - ry;
+    final double faceY = cy + 2;
+
+    if (stage >= 3) {
+      final Path arm = Path()
+        ..moveTo(rx - 2.5, cy + 5)
+        ..quadraticBezierTo(17, cy + 5, 17, cy - 2)
+        ..lineTo(17, cy - 7);
+      canvas.drawPath(arm, _strokeP(body, 8));
+    }
+    if (stage >= 2) {
+      final Path arm = Path()
+        ..moveTo(-(rx - 2.5), cy + 8)
+        ..quadraticBezierTo(-16.5, cy + 8, -16.5, cy)
+        ..lineTo(-16.5, cy - 6);
+      canvas.drawPath(arm, _strokeP(body, 7.5));
+    }
+    _oval(canvas, 0, cy, rx, ry, Paint()..color = body);
+    final Path ribL = Path()
+      ..moveTo(-rx * 0.45, cy - ry + 4)
+      ..lineTo(-rx * 0.45, -16);
+    final Path ribR = Path()
+      ..moveTo(rx * 0.45, cy - ry + 4)
+      ..lineTo(rx * 0.45, -16);
+    final Paint ribP = _strokeP(ridge, 1.5)..color = ridge.withOpacity(0.6);
+    canvas.drawPath(ribL, ribP);
+    canvas.drawPath(ribR, ribP);
+
+    final Paint needles = _strokeP(Colors.white, 1.3)
+      ..color = Colors.white.withOpacity(0.75);
+    canvas.drawLine(const Offset(-6.5, -33), const Offset(-4.1, -35.4), needles);
+    canvas.drawLine(const Offset(6.5, -29), const Offset(8.9, -31.4), needles);
+    canvas.drawLine(const Offset(-6, -21.5), const Offset(-3.6, -23.9), needles);
+    if (stage >= 2) {
+      canvas.drawLine(const Offset(6.5, -40), const Offset(8.9, -42.4), needles);
+    }
+    if (stage >= 3) {
+      canvas.drawLine(const Offset(-6.5, -45), const Offset(-4.1, -47.4), needles);
+      final Paint petal = Paint()..color = const Color(0xFFFFD24C);
+      for (final double a in const <double>[0, 72, 144, 216, 288]) {
+        final double rad = a * math.pi / 180;
+        canvas.drawCircle(
+          Offset(7.2 * math.cos(rad), cy - ry - 3 + 7.2 * math.sin(rad)),
+          3.4,
+          petal,
+        );
+      }
+      canvas.drawCircle(
+          Offset(0, cy - ry - 3), 2.6, Paint()..color = const Color(0xFFE8890C));
+    }
+    _blush(canvas, rx * 0.72, faceY + 4.5, 2.8, 0.4);
+    _eyes(canvas, 4.6, faceY, 4.1, closed);
+    _smileArc(canvas, faceY + 6.4, 3.4);
+  }
+
+  /// ПОДСОЛНУШЕК: стебель, листья с прожилками, бутон → жёлтая головка.
+  void _paintSunflower(Canvas canvas, int stage, bool closed) {
+    final double stemTop = stage == 1 ? -31 : stage == 2 ? -47 : -50;
+    const double petalY = -64;
+
+    final Path stem = Path()
+      ..moveTo(0, -17)
+      ..quadraticBezierTo(2, (stemTop - 17) / 2, 0, stemTop);
+    canvas.drawPath(stem, _strokeP(_leafC, stage == 1 ? 3 : 4.2));
+
+    if (stage >= 2) {
+      _paintRotatedOval(canvas, -9.5, -30, 8.5, 4, -18, paint: Paint()..color = _leafC);
+      canvas.drawLine(const Offset(-14.5, -31.5), const Offset(-4.5, -28.5),
+          _strokeP(_shade(_leafC, -0.2), 1.2));
+      _paintRotatedOval(canvas, 9.5, -36, 8.5, 4, 18, paint: Paint()..color = _leafC);
+      canvas.drawLine(const Offset(14.5, -37.5), const Offset(4.5, -34.5),
+          _strokeP(_shade(_leafC, -0.2), 1.2));
+    }
+
+    if (stage == 1) {
+      _paintRotatedOval(canvas, -6, -30.5, 5.5, 3, -22, paint: Paint()..color = _leafC);
+      _paintRotatedOval(canvas, 6, -30.5, 5.5, 3, 22, paint: Paint()..color = _leafC);
+      canvas.drawCircle(const Offset(0, -34.5), 4.4, Paint()..color = const Color(0xFF8FCF7A));
+      _eyes(canvas, 2.3, -35.4, 2, closed);
+      _smileArc(canvas, -33.2, 1.7);
+    } else if (stage == 2) {
+      final Path sepal = Path()
+        ..moveTo(-6.5, -46.5)
+        ..lineTo(0, -50.5)
+        ..lineTo(6.5, -46.5)
+        ..quadraticBezierTo(0, -43.5, -6.5, -46.5)
+        ..close();
+      canvas.drawPath(sepal, Paint()..color = _shade(_leafC, -0.05));
+      _oval(canvas, 0, -53.5, 7, 8.5, Paint()..color = const Color(0xFF7FB069));
+      canvas.drawPath(
+          Path()
+            ..moveTo(-2.6, -46.8)
+            ..quadraticBezierTo(-3.2, -52, -2, -58),
+          _strokeP(_shade(const Color(0xFF7FB069), -0.2), 1.3));
+      canvas.drawPath(
+          Path()
+            ..moveTo(2.6, -46.8)
+            ..quadraticBezierTo(3.2, -52, 2, -58),
+          _strokeP(_shade(const Color(0xFF7FB069), -0.2), 1.3));
+      _blush(canvas, 5.2, -50.5, 2.1, 0.4);
+      _eyes(canvas, 3.4, -54.2, 2.9, closed);
+      _smileArc(canvas, -50.4, 2.5);
+    } else {
+      for (int i = 0; i < 12; i++) {
+        final double rad = i * 30 * math.pi / 180;
+        final double px = 15.8 * math.cos(rad);
+        final double py = petalY + 15.8 * math.sin(rad);
+        _paintRotatedOval(canvas, px, py, 6.6, 3.5, i * 30,
+            paint: Paint()..color = const Color(0xFFFFC800));
+      }
+      canvas.drawCircle(Offset(0, petalY), 10.5, Paint()..color = const Color(0xFF8A5A2B));
+      canvas.drawCircle(Offset(0, petalY), 10.5,
+          _strokeP(_shade(const Color(0xFF8A5A2B), -0.2), 1.4));
+      _blush(canvas, 7.2, petalY + 4.4, 2.7, 0.4);
+      _eyes(canvas, 4.4, petalY - 1, 3.9, closed);
+      _smileArc(canvas, petalY + 4.4, 3.2);
+    }
+  }
+
+  /// КЛЕВЕРЧИК: листья-сердечки, на цветении — четыре листа и цветки удачи.
+  void _paintClover(Canvas canvas, int stage, bool closed) {
+    final Paint stems = _strokeP(_shade(_leafC, -0.1), 1.6);
+    if (stage == 1) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..quadraticBezierTo(-0.5, -21, -1, -25),
+          stems);
+    } else {
+      canvas.drawPath(
+          Path()..moveTo(0, -17)..quadraticBezierTo(-5, -22, -9, -26), stems);
+      canvas.drawPath(
+          Path()..moveTo(0, -17)..quadraticBezierTo(5, -22, 9, -26), stems);
+      canvas.drawPath(
+          Path()..moveTo(0, -17)..quadraticBezierTo(-0.5, -26, 0, -32), stems);
+      if (stage >= 3) {
+        canvas.drawPath(
+            Path()..moveTo(0, -17)..quadraticBezierTo(2, -26, 5.5, -39), stems);
+      }
+    }
+
+    if (stage == 1) {
+      _heartLeaf(canvas, -1, -24.5, -8, 1.15);
+      _eyes(canvas, 2.7, -30.5, 2.2, closed);
+      _smileArc(canvas, -28, 1.9);
+    } else if (stage == 2) {
+      _heartLeaf(canvas, -9.5, -25.5, -32, 1.05);
+      _heartLeaf(canvas, 9.5, -25.5, 32, 1.05);
+      _heartLeaf(canvas, 0, -31.5, 0, 1.15);
+      _blush(canvas, 5, -29.5, 2, 0.4);
+      _eyes(canvas, 3, -31.5, 2.6, closed);
+      _smileArc(canvas, -29, 2.2);
+    } else {
+      _heartLeaf(canvas, -10.5, -26.5, -36, 1.3);
+      _heartLeaf(canvas, 10.5, -26.5, 36, 1.3);
+      _heartLeaf(canvas, -5.5, -38.5, -10, 1.25);
+      _heartLeaf(canvas, 6, -38.5, 10, 1.25);
+      final Paint wf = Paint()..color = Colors.white;
+      canvas.drawCircle(const Offset(-14, -20), 1.7, wf);
+      canvas.drawCircle(const Offset(-16.4, -19), 1.7, wf);
+      canvas.drawCircle(const Offset(-15.2, -17.6), 1.7, wf);
+      canvas.drawCircle(const Offset(14.5, -21.5), 1.7, wf);
+      canvas.drawCircle(const Offset(16.9, -20.5), 1.7, wf);
+      canvas.drawCircle(const Offset(15.7, -19.1), 1.7, wf);
+      canvas.drawCircle(const Offset(-15.2, -18.9), 1.1, Paint()..color = const Color(0xFFFFC800));
+      canvas.drawCircle(const Offset(15.7, -20.4), 1.1, Paint()..color = const Color(0xFFFFC800));
+      _blush(canvas, 5.6, -31, 2.2, 0.4);
+      _eyes(canvas, 3.4, -33, 3, closed);
+      _smileArc(canvas, -30.4, 2.5);
+    }
+  }
+
+  /// БОНСАЙЧИК: изогнутый ствол, облака листвы, мох на земле.
+  void _paintBonsai(Canvas canvas, int stage, bool closed) {
+    final Color foliage = _bonsaiC;
+    final Color cloudDark = _shade(foliage, -0.12);
+
+    if (stage == 1) {
+      canvas.drawLine(const Offset(0, -17), const Offset(0, -26), _strokeP(_trunkC, 4));
+      _oval(canvas, 0, -31.5, 9, 7, Paint()..color = foliage);
+      _blush(canvas, 5.5, -29.5, 1.9, 0.4);
+      _eyes(canvas, 3.4, -32.2, 2.7, closed);
+      _smileArc(canvas, -29.6, 2.3);
+    } else if (stage == 2) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(0, -22, -3.5, -25, -3, -30),
+          _strokeP(_trunkC, 5));
+      canvas.drawPath(
+          Path()
+            ..moveTo(-1, -26)
+            ..quadraticBezierTo(4, -27.5, 6.5, -29.5),
+          _strokeP(_trunkC, 3.4));
+      _oval(canvas, -4.5, -35.5, 8.5, 6.5, Paint()..color = foliage);
+      _oval(canvas, 7, -32, 6.5, 5, Paint()..color = cloudDark);
+      _blush(canvas, 0.8, -33.5, 1.9, 0.4);
+      _eyes(canvas, -1.2, -36.2, 2.7, closed);
+      _smileArc(canvas, -33.6, 2.3);
+    } else {
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(1, -24, -4.5, -28, -2.5, -36),
+          _strokeP(_trunkC, 6.5));
+      canvas.drawPath(
+          Path()
+            ..moveTo(-2, -31)
+            ..quadraticBezierTo(-8, -32.5, -10.5, -35),
+          _strokeP(_trunkC, 3.5));
+      canvas.drawPath(
+          Path()
+            ..moveTo(-2.5, -35)
+            ..quadraticBezierTo(4, -37.5, 7, -39),
+          _strokeP(_trunkC, 3.5));
+      _oval(canvas, -11, -38.5, 7.5, 5.5, Paint()..color = cloudDark);
+      _oval(canvas, 10, -41, 7, 5.2, Paint()..color = cloudDark);
+      _oval(canvas, 0, -46.5, 12, 9, Paint()..color = foliage);
+      final Paint moss = Paint()..color = _leafC.withOpacity(0.85);
+      canvas.drawCircle(const Offset(-6, -17.5), 1.7, moss);
+      canvas.drawCircle(const Offset(7, -18), 1.5, moss);
+      canvas.drawCircle(const Offset(2, -16.8), 1.3, moss);
+      _blush(canvas, 7, -44, 2.4, 0.4);
+      _eyes(canvas, 4.2, -47, 3.4, closed);
+      _smileArc(canvas, -44.2, 2.9);
+    }
+  }
+
+  /// ПАПОРОТИК: завиток → арки ваи́й с листочками, лицо у основания.
+  void _paintFern(Canvas canvas, int stage, bool closed) {
+    final Color frond = _fernC;
+    final Color tick = _shade(frond, -0.12);
+
+    if (stage == 1) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(0, -24, -4.5, -27, -4.5, -23.5)
+            ..cubicTo(-4.5, -20.5, -1.2, -21, -0.8, -24),
+          _strokeP(frond, 2.6));
+      canvas.drawPath(
+          Path()..moveTo(1, -17)..quadraticBezierTo(3.5, -22, 3, -26),
+          _strokeP(frond, 2));
+    } else if (stage == 2) {
+      final Paint p = _strokeP(frond, 2.8);
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(-5, -23, -10, -26, -15.5, -26.5),
+          p);
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(5, -23, 10, -26, 15.5, -26.5),
+          p);
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(-0.5, -25, -1, -30, 0.5, -34),
+          _strokeP(frond, 2.4));
+    } else {
+      final Paint p = _strokeP(frond, 3);
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(-6, -24, -12, -28, -19, -28.5),
+          p);
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(6, -24, 12, -28, 19, -28.5),
+          p);
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(-4, -27, -6, -34, -5.5, -40),
+          _strokeP(frond, 2.6));
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(4, -27, 6, -34, 5.5, -40),
+          _strokeP(frond, 2.6));
+      canvas.drawPath(
+          Path()
+            ..moveTo(0, -17)
+            ..cubicTo(0, -26, 0.5, -33, -0.5, -38),
+          _strokeP(frond, 2.4));
+    }
+
+    final Paint ticks = _strokeP(tick, 1.5);
+    void tickLine(double x1, double y1, double x2, double y2) =>
+        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), ticks);
+
+    if (stage == 2) {
+      tickLine(-6, -22.5, -5.4, -26.6);
+      tickLine(-10.5, -25, -9.4, -28.9);
+      tickLine(6, -22.5, 5.4, -26.6);
+      tickLine(10.5, -25, 9.4, -28.9);
+      tickLine(-1.5, -27, -4, -29.4);
+      tickLine(1.5, -27, 4, -29.4);
+    } else if (stage >= 3) {
+      tickLine(-7, -22.5, -6.3, -27);
+      tickLine(-12, -26, -10.7, -30.6);
+      tickLine(-16.5, -27.6, -15.3, -32.2);
+      tickLine(7, -22.5, 6.3, -27);
+      tickLine(12, -26, 10.7, -30.6);
+      tickLine(16.5, -27.6, 15.3, -32.2);
+      tickLine(-5, -33, -8, -35);
+      tickLine(5, -33, 8, -35);
+      tickLine(-5.5, -38, -8.5, -39.8);
+      tickLine(5.5, -38, 8.5, -39.8);
+    }
+
+    _blush(canvas, 4.6, -19.8, 1.9, 0.4);
+    _eyes(canvas, 3.1, -22, 2.4, closed);
+    _smileArc(canvas, -19.9, 1.9);
+  }
+
+  /// ТЮЛЬПАНЧИК: листья, бутон с чашелистиками → раскрытый цветок.
+  void _paintTulip(Canvas canvas, int stage, bool closed) {
+    final Color petal = _tulipC;
+    final Color petalDark = _shade(petal, -0.16);
+    final double stemTop = stage == 1 ? -24 : stage == 2 ? -40 : -46;
+
+    final Path stem = Path()
+      ..moveTo(0, -17)
+      ..quadraticBezierTo(1.5, (stemTop - 17) / 2, 0, stemTop);
+    canvas.drawPath(stem, _strokeP(_leafC, stage == 1 ? 2.6 : 3.6));
+
+    canvas.drawPath(
+        Path()
+          ..moveTo(0, -18)
+          ..quadraticBezierTo(-8, -24, -7.5, -40)
+          ..quadraticBezierTo(-2.5, -30, 0.5, -22)
+          ..close(),
+        Paint()..color = _leafC);
+    canvas.drawPath(
+        Path()
+          ..moveTo(0, -18)
+          ..quadraticBezierTo(8, -24, 7.5, -40)
+          ..quadraticBezierTo(2.5, -30, -0.5, -22)
+          ..close(),
+        Paint()..color = _shade(_leafC, -0.08));
+
+    if (stage == 1) {
+      _eyes(canvas, 2.5, -25.5, 2, closed);
+      _smileArc(canvas, -23.4, 1.7);
+    } else if (stage == 2) {
+      final Path sepal = Path()
+        ..moveTo(-6, -38.5)
+        ..lineTo(0, -41.5)
+        ..lineTo(6, -38.5)
+        ..quadraticBezierTo(0, -35.5, -6, -38.5)
+        ..close();
+      canvas.drawPath(sepal, Paint()..color = _shade(_leafC, -0.05));
+      _oval(canvas, 0, -46, 6.5, 8, Paint()..color = petal);
+      canvas.drawPath(
+          Path()
+            ..moveTo(-2.6, -39.5)
+            ..quadraticBezierTo(-3.4, -46, -2.2, -52.4),
+          _strokeP(petalDark, 1.3));
+      canvas.drawPath(
+          Path()
+            ..moveTo(2.6, -39.5)
+            ..quadraticBezierTo(3.4, -46, 2.2, -52.4),
+          _strokeP(petalDark, 1.3));
+      _blush(canvas, 4.8, -43.5, 1.9, 0.4);
+      _eyes(canvas, 3.2, -46.8, 2.6, closed);
+      _smileArc(canvas, -43.9, 2.2);
+    } else {
+      final Path bloom = Path()
+        ..moveTo(-9.5, -54)
+        ..cubicTo(-9.5, -62.5, -5, -66.5, 0, -62.5)
+        ..cubicTo(5, -66.5, 9.5, -62.5, 9.5, -54)
+        ..cubicTo(9.5, -47.5, 5, -44, 0, -44)
+        ..cubicTo(-5, -44, -9.5, -47.5, -9.5, -54)
+        ..close();
+      canvas.drawPath(bloom, Paint()..color = petal);
+      canvas.drawPath(
+          Path()
+            ..moveTo(-3, -62.4)
+            ..cubicTo(-6, -58, -6.4, -50.5, -5.2, -45.2),
+          _strokeP(petalDark, 1.7));
+      canvas.drawPath(
+          Path()
+            ..moveTo(3, -62.4)
+            ..cubicTo(6, -58, 6.4, -50.5, 5.2, -45.2),
+          _strokeP(petalDark, 1.7));
+      _blush(canvas, 6.4, -50.5, 2.4, 0.4);
+      _eyes(canvas, 4.1, -53.8, 3.1, closed);
+      _smileArc(canvas, -50.8, 2.6);
+    }
+  }
 
   /// Большое яйцо (v1.2.0): заметно крупнее прежнего, слегка покачивается
   /// и покрывается трещинками по мере приближения вылупления.

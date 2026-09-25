@@ -151,6 +151,17 @@
   transform-origin: 50% 100%;
 }
 
+/* Растения v1.3.0: «крона» в горшке плавно качается (горшок стоит на месте). */
+@keyframes ttg-sway {
+  0%, 100% { transform: rotate(-2.2deg); }
+  50% { transform: rotate(2.2deg); }
+}
+.ttg-sway {
+  animation: ttg-sway 4.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
 @keyframes ttg-blink {
   0%, 91%, 100% { transform: scaleY(1); }
   93% { transform: scaleY(0.1); }

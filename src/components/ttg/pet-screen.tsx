@@ -6,9 +6,10 @@
 import { useTTG, activePet, countedSecondsSoFar } from "@/lib/ttg/store";
 import {
   C,
-  STAGE_NAMES,
   minutesToNextStage,
   petStage,
+  stageEmoji,
+  stageName,
   stageProgress,
 } from "@/lib/ttg/types";
 import { formatTimer } from "@/lib/ttg/format";
@@ -18,19 +19,6 @@ import { CheckCircle2, Clock, Flame, Pencil, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
-
-function stageEmoji(stage: number): string {
-  switch (stage) {
-    case 3:
-      return "🐾";
-    case 2:
-      return "🐣";
-    case 1:
-      return "🐥";
-    default:
-      return "🥚";
-  }
-}
 
 export function PetScreen() {
   const pets = useTTG((s) => s.pets);
@@ -135,7 +123,7 @@ export function PetScreen() {
             <div className="flex items-center gap-2">
               <span className="text-lg">🐾</span>
               <span className="flex-1 truncate text-[15px] font-extrabold" style={{ color: C.ink }}>
-                {active ? `${active.name} — ${STAGE_NAMES[petStage(active)]}` : "Ждём новое яйцо"}
+                {active ? `${active.name} — ${stageName(active.type, petStage(active))}` : "Ждём нового питомца"}
               </span>
               {active && (
                 <>
@@ -208,7 +196,7 @@ export function PetScreen() {
                     borderColor: adult ? C.green : "#F0E0C0",
                   }}
                 >
-                  {stageEmoji(petStage(p))} {p.name} · {STAGE_NAMES[petStage(p)]}
+                  {stageEmoji(p.type, petStage(p))} {p.name} · {stageName(p.type, petStage(p))}
                 </span>
               );
             })}

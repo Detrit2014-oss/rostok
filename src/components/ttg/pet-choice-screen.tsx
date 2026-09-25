@@ -6,12 +6,12 @@
 
 import { useState } from "react";
 import { useTTG } from "@/lib/ttg/store";
-import { C, PET_CATALOG, STAGE_THRESHOLDS } from "@/lib/ttg/types";
+import { C, isPlant, PET_CATALOG, STAGE_THRESHOLDS } from "@/lib/ttg/types";
 import type { Pet, PetType } from "@/lib/ttg/types";
 import { PetScene } from "./scene";
 import { BigButton } from "./widgets";
 
-/** Превью-питомец стадии «Малыш» — показывает, кем станет яйцо. */
+/** Превью-питомец стадии «Малыш/Росток» — показывает, кем станет яйцо/семечко. */
 function previewPet(type: PetType): Pet {
   const species = PET_CATALOG.find((s) => s.type === type) ?? PET_CATALOG[0];
   return {
@@ -43,14 +43,14 @@ export function PetChoiceScreen() {
     >
       <div className="px-5 pt-5 text-center">
         <p className="text-[24px] font-extrabold" style={{ color: C.ink }}>
-          Выбери питомца! 🐣
+          Выбери питомца! 🐣🌱
         </p>
         <p
           className="mt-1 text-[13.5px] font-semibold"
           style={{ color: C.inkSoft }}
         >
-          Он вырастет, пока вы отдыхаете от телефона. Всего видов:{" "}
-          {PET_CATALOG.length}
+          Зверята вылупляются из яйца, растения вырастают из семечка. Всего
+          видов: {PET_CATALOG.length}
         </p>
       </div>
 
@@ -95,6 +95,12 @@ export function PetChoiceScreen() {
                     style={{ color: C.inkSoft }}
                   >
                     {s.desc}
+                  </p>
+                  <p
+                    className="mt-1 text-[10.5px] font-extrabold"
+                    style={{ color: isPlant(s.type) ? C.greenDark : "#B07A2A" }}
+                  >
+                    {isPlant(s.type) ? "🌱 Вырастет из семечка" : "🥚 Вылупится из яйца"}
                   </p>
                 </div>
               </button>

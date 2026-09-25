@@ -1,5 +1,5 @@
 /// Тип питомца — влияет на внешность в процедурной отрисовке.
-/// С v1.2.0 видов десять — все нарисованы кодом (CustomPaint).
+/// С v1.3.0 видов шестнадцать: 10 зверят (из яйца) + 6 растений (из семечки).
 enum PetType {
   fox,
   cat,
@@ -11,6 +11,25 @@ enum PetType {
   hedgehog,
   panda,
   bear,
+  // v1.3.0: растения — растут из семечка в горшочке, а не вылупляются из яйца.
+  cactus,
+  sunflower,
+  clover,
+  bonsai,
+  fern,
+  tulip,
+}
+
+extension PetTypeX on PetType {
+  /// Растение? Тогда стадия 0 — семечко в горшке, а не яйцо.
+  bool get isPlant => const <PetType>{
+        PetType.cactus,
+        PetType.sunflower,
+        PetType.clover,
+        PetType.bonsai,
+        PetType.fern,
+        PetType.tulip,
+      }.contains(this);
 }
 
 /// Питомец — сердце приложения. Растёт от минут, проведённых
@@ -45,16 +64,10 @@ class Pet {
   }
 
   String get stageName {
-    switch (stage) {
-      case 0:
-        return 'Яйцо';
-      case 1:
-        return 'Малыш';
-      case 2:
-        return 'Подросток';
-      default:
-        return 'Взрослый';
-    }
+    const List<String> animal = <String>['Яйцо', 'Малыш', 'Подросток', 'Взрослый'];
+    const List<String> plant = <String>['Семечко', 'Росток', 'Кустик', 'Цветение'];
+    final List<String> names = type.isPlant ? plant : animal;
+    return stage >= 0 && stage < names.length ? names[stage] : names.last;
   }
 
   /// Прогресс внутри текущей стадии: 0..1.
