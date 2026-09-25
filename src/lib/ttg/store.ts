@@ -39,6 +39,54 @@ export const K_DIARY_SYSTEM_PROMPT =
 const BOT_NAMES = ["Аня", "Марк", "Лена", "Дима", "Соня", "Кирилл"];
 const BOT_EMOJIS = ["🌻", "🌷", "🌿", "🌲", "🍀", "🐝"];
 
+// ── Защита от сохранений из более новых версий демо ──────────────────
+// Если в браузере остались данные от версии новее текущего кода
+// (например, после отката), аккуратно приводим их к валидному виду:
+// неизвестные виды питомцев ремапим на существующие, кривые поля чиним.
+const VALID_TYPES = new Set<string>(PET_CATALOG.map((s) => s.type as string));
+
+function sanitizePets(raw: unknown): Pet[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((p: unknown, i: number): Pet => {
+    const o = (p ?? {}) as Record<string, unknown>;
+    const seed = stringHash(typeof o.id === "string" ? o.id : `p${i}`);
+    const fallback = PET_CATALOG[Math.abs(seed) % PET_CATALOG.length];
+    const type =
+      typeof o.type === "string" && VALID_TYPES.has(o.type)
+        ? (o.type as PetType)
+        : fallback.type;
+    return {
+      id: typeof o.id === "string" && o.id ? o.id : `p${Date.now()}${i}`,
+      name:
+        typeof o.name === "string" && o.name.trim() ? o.name : fallback.name,
+      type,
+      bornAt: Number.isFinite(o.bornAt) ? (o.bornAt as number) : Date.now(),
+      growthMinutes: Number.isFinite(o.growthMinutes)
+        ? Math.max(0, Math.floor(o.growthMinutes as number))
+        : 0,
+    };
+  });
+}
+
+function sanitizePersisted(persisted: unknown): Partial<TTGState> {
+  const p = (persisted ?? {}) as Record<string, unknown>;
+  const out: Partial<TTGState> = { ...p } as Partial<TTGState>;
+  out.pets = sanitizePets(p.pets);
+  if (!Array.isArray(p.diaryEntries)) out.diaryEntries = [];
+  if (p.weekly !== null && (typeof p.weekly !== "object" || p.weekly === undefined)) {
+    out.weekly = null;
+  }
+  // Версию приложения откатываем к текущей, если в сохранении она «новее»
+  // (иначе профиль покажет версию, которой в демо ещё нет).
+  if (
+    typeof out.appVersion === "string" &&
+    compareVersions(out.appVersion, K_APP_VERSION) > 0
+  ) {
+    out.appVersion = K_APP_VERSION;
+  }
+  return out;
+}
+
 interface TTGState {
   hydrated: boolean;
 
@@ -490,6 +538,11 @@ export const useTTG = create<TTGState>()(
     {
       name: "ttg-web-state-v1",
       version: 2,
+      // merge вызывается при КАЖДОЙ гидрации — здесь и санитизируем.
+      merge: (persisted, current) => ({
+        ...current,
+        ...sanitizePersisted(persisted),
+      }),
       partialize: (s) => ({
         pets: s.pets,
         totalMinutes: s.totalMinutes,
@@ -513,7 +566,7 @@ export const useTTG = create<TTGState>()(
         hintDismissed: s.hintDismissed,
       }),
       migrate: (persisted: unknown, version: number) => {
-        const s = persisted as Partial<TTGState>;
+        const s = sanitizePersisted(persisted) as Partial<TTGState>;
         if (version < 2) {
           // v1: яйцо создавалось автоматически — тем, у кого коллекция
           // уже есть, выбор не показываем; новым — показываем.

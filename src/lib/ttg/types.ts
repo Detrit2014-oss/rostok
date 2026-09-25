@@ -212,6 +212,9 @@ export const C = {
   bear: "#A9744F",
 } as const;
 
+/** Неизвестный вид (например, сохранение из более новой версии) — красим как лисёнка, чтобы не падать. */
+const FALLBACK_COLOR = C.fox;
+
 export function bodyColor(type: PetType): string {
   switch (type) {
     case "fox":
@@ -234,13 +237,15 @@ export function bodyColor(type: PetType): string {
       return C.panda;
     case "bear":
       return C.bear;
+    default:
+      return FALLBACK_COLOR;
   }
 }
 
 /** Белый животик у пингвинёнка и панды, у остальных — смесь с белым. */
 export function bellyColor(type: PetType): string {
   if (type === "penguin" || type === "panda") return "#FDFBF5";
-  const hex = bodyColor(type).replace("#", "");
+  const hex = (bodyColor(type) ?? FALLBACK_COLOR).replace("#", "");
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);
   const b = parseInt(hex.slice(4, 6), 16);
